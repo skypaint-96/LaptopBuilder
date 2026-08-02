@@ -52,8 +52,36 @@ if grep -q '^#ParallelDownloads' /etc/pacman.conf; then
 elif ! grep -q '^ParallelDownloads' /etc/pacman.conf; then
   printf '\nParallelDownloads = 5\n' >> /etc/pacman.conf
 fi
+if bool_true "$ENABLE_MULTILIB" && ! pacman-conf --repo-list | grep -qx multilib; then
+  temp_conf=$(mktemp)
+  awk '
+    /^#?\[multilib\]$/ {
+      print "[multilib]"
+      in_multilib = 1
+      found_multilib = 1
+      next
+    }
+    in_multilib && /^#?Include[[:space:]]*=[[:space:]]*\/etc\/pacman\.d\/mirrorlist$/ {
+      sub(/^#/, "")
+      print
+      next
+    }
+    in_multilib && /^\[/ { in_multilib = 0 }
+    { print }
+    END {
+      if (!found_multilib) {
+        print ""
+        print "[multilib]"
+        print "Include = /etc/pacman.d/mirrorlist"
+      }
+    }
+  ' /etc/pacman.conf > "$temp_conf"
+  install -m 0644 "$temp_conf" /etc/pacman.conf
+  rm -f "$temp_conf"
+fi
 if bool_true "$ENABLE_MULTILIB"; then
-  sed -i '/^#\[multilib\]/,/^#Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
+  pacman-conf --repo-list | grep -qx multilib \
+    || die "Could not enable multilib in the installed system."
 fi
 
 info "Configuring encrypted early boot and UKIs."
@@ -155,13 +183,22 @@ else
 fi
 systemctl set-default graphical.target
 
+install -d -m 0755 /var/lib/arch-workstation /etc/profile.d
 cat > /etc/motd <<'EOF'
 Arch base installation is complete.
-Run `archctl provision`, then follow docs/SECURITY.md for Secure Boot and TPM2.
+Run `archctl finish` as the normal user to resume the guided first-boot workflow.
 EOF
 chmod 0644 /etc/motd
 
+cat > /etc/profile.d/arch-workstation-first-boot.sh <<'EOF'
+if [[ $- == *i* && -x /usr/local/bin/archctl && ! -e /var/lib/arch-workstation/complete ]]; then
+  printf '%s\n' 'arch-workstation setup is incomplete. Run: archctl finish'
+fi
+EOF
+chmod 0644 /etc/profile.d/arch-workstation-first-boot.sh
+
 ln -sf /opt/arch-workstation/archctl /usr/local/bin/archctl
+ln -sf /opt/arch-workstation/start.sh /usr/local/bin/arch-workstation-start
 chown -R root:root /opt/arch-workstation
 chown root:wheel /etc/arch-installer/install.conf
 chmod 0640 /etc/arch-installer/install.conf

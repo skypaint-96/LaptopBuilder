@@ -1,77 +1,57 @@
 # Recovery guide
 
-Keep this guide and the repository somewhere other than the laptop. Substitute actual devices from `lsblk`; commands below use the default NVMe layout.
+Keep a copy of this guide and the repository somewhere other than the laptop. Recovery commands assume the default disk layout; substitute the actual device from `lsblk`.
 
-## First response
+## First response checklist
 
-1. Record the exact failure.
-2. Do not clear the TPM, restore firmware keys, reformat or delete LUKS slots impulsively.
-3. Confirm the passphrase or recovery key is available.
-4. Disconnect unneeded disks before destructive or mount commands.
-5. Prefer reversible paths: recovery USB slot, maintenance shell, LTS kernel, passphrase fallback or temporary Secure Boot disablement.
+1. Stop and record the exact failure message.
+2. Do not clear the TPM, reset Secure Boot keys, reformat, or delete LUKS slots impulsively.
+3. Confirm that the LUKS passphrase or offline recovery key is available.
+4. Disconnect unneeded external storage before running disk commands.
+5. Prefer reversible actions: choose the LTS kernel, use passphrase fallback, or temporarily disable Secure Boot.
 
-## Installer USB recovery
+## Boot the LTS kernel
 
-At the GRUB menu:
+systemd-boot normally hides behind a short timeout. Press and hold **Space** during startup to display the menu, then select the `arch-linux-lts.efi` entry.
 
-- **current cached slot** boots the slot selected after the last successful refresh;
-- **recovery slot** boots the other complete Arch environment;
-- **maintenance shell** does not start the automated installer.
-
-When a newly refreshed slot fails, boot recovery. The refresh process never overwrites the slot that was running when the update was staged.
-
-From a live shell, inspect and verify:
-
-```bash
-cat /run/archiso/bootmnt/MASON-ARCH/state/active-slot.cfg
-cat /run/archiso/bootmnt/MASON-ARCH/cache/repository/current.commit 2>/dev/null || true
-sudo /run/mason-installer/repo/usb/verify-usb.sh \
-  --usb-root /run/archiso/bootmnt
-```
-
-
-If current repository validation fails, startup uses previous automatically. If both fail, rebuild the USB from a known-good clone rather than disabling checks.
-
-At startup, recognised interrupted refresh states are repaired conservatively. A complete `.old` Arch slot or package-cache pair is restored when activation did not finish; a lone complete `.new` Arch slot can be completed; and an invalid selected Arch slot is changed to the other verified slot. Run `verify-usb.sh` after any such recovery warning.
-
-When the USB is read-only, automatic refresh is disabled but cached boot and installation remain available. Do not force writes to a failing device; copy/rebuild it from the Git repository and verify the replacement.
-
-## Boot the installed LTS kernel
-
-Hold **Space** during systemd-boot startup and select `arch-linux-lts.efi`. After booting:
+After booting successfully:
 
 ```bash
 uname -r
 sudo archctl verify
 ```
 
+Investigate the current kernel or package update before changing the default permanently.
+
 ## TPM unlock fails
 
-Use the ordinary LUKS passphrase or recovery key. Once booted:
+A PCR mismatch or TPM lockout should fall back to an ordinary LUKS passphrase prompt. Enter the known-good passphrase.
+
+Once booted, inspect the token and Secure Boot state:
 
 ```bash
 sudo systemd-cryptenroll /dev/disk/by-uuid/YOUR_LUKS_UUID
-sudo cryptsetup luksDump /dev/disk/by-uuid/YOUR_LUKS_UUID
 sudo sbctl status
+sudo cryptsetup luksDump /dev/disk/by-uuid/YOUR_LUKS_UUID
 ```
 
-Remove only systemd TPM enrollment:
+Remove TPM enrollment without touching passphrase slots:
 
 ```bash
 sudo archctl tpm-remove
 ```
 
-After confirming Secure Boot state:
+After confirming the machine's firmware and Secure Boot state, re-enroll:
 
 ```bash
-sudo archctl tpm-enroll
+archctl tpm-enroll
 ```
 
-Reboot and test both paths.
+Reboot and test both TPM/PIN and passphrase paths.
 
 ## Secure Boot prevents booting
 
-Temporarily disable Secure Boot without restoring factory keys. Boot the installed system or USB maintenance environment and inspect:
+Temporarily disable Secure Boot in firmware without restoring factory keys. Boot Arch and inspect:
 
 ```bash
 sudo sbctl status
@@ -79,7 +59,7 @@ sudo sbctl verify
 bootctl status
 ```
 
-With the expected owner keys available:
+Refresh and re-sign the complete boot path:
 
 ```bash
 sudo bootctl --esp-path=/efi update
@@ -88,31 +68,33 @@ sudo sbctl sign-all
 sudo sbctl verify
 ```
 
-Re-enable Secure Boot and test. Restore lost `sbctl` keys only from the protected offline backup. If no key backup exists, establish new owner keys from firmware Setup Mode and re-sign the boot chain; LUKS encryption is separate.
+Re-enable Secure Boot and test. If the local sbctl key directory has been lost, restore it from the protected offline backup before signing. If no backup exists, establish a new owner-key set from Setup Mode and re-sign everything; the existing LUKS data remains encrypted independently of Secure Boot.
 
-## Chroot from the installer USB
+## Chroot from the Arch ISO
 
-Boot either usable Arch live slot with Secure Boot disabled. Identify devices:
+Boot the official Arch ISO with Secure Boot disabled. Identify the partitions:
 
 ```bash
 lsblk -f
 ```
 
-Open and mount:
+Open LUKS and mount the installed layout:
 
 ```bash
 cryptsetup open /dev/nvme0n1p2 cryptroot
 mount -o subvol=@ /dev/mapper/cryptroot /mnt
+
 mkdir -p /mnt/{efi,home,var/log,var/cache/pacman/pkg,.snapshots}
 mount /dev/nvme0n1p1 /mnt/efi
 mount -o subvol=@home /dev/mapper/cryptroot /mnt/home
 mount -o subvol=@var_log /dev/mapper/cryptroot /mnt/var/log
 mount -o subvol=@pkg /dev/mapper/cryptroot /mnt/var/cache/pacman/pkg
 mount -o subvol=@snapshots /dev/mapper/cryptroot /mnt/.snapshots
+
 arch-chroot /mnt
 ```
 
-Typical online repair:
+Inside the chroot, typical repair commands are:
 
 ```bash
 pacman -Syu
@@ -122,9 +104,7 @@ sbctl sign-all
 sbctl verify
 ```
 
-Run signing only when the expected key exists under `/var/lib/sbctl/keys`.
-
-Exit cleanly:
+Exit and cleanly unmount:
 
 ```bash
 exit
@@ -133,16 +113,20 @@ cryptsetup close cryptroot
 reboot
 ```
 
-## Root snapshot rollback
+Only run `sbctl sign-all` when the expected owner key is present under `/var/lib/sbctl/keys`.
 
-Snapshots exclude separate home, log, package-cache and snapshot subvolumes. Inspect first:
+## Restore a root Snapper snapshot
+
+Snapshots do not include the separately mounted home, log, package-cache, or snapshot subvolumes. A root rollback therefore changes operating-system files while retaining user data and logs.
+
+First inspect snapshots from a working boot:
 
 ```bash
 sudo snapper -c root list
 sudo snapper -c root status OLD..NEW
 ```
 
-Offline, open LUKS and mount the Btrfs top level:
+For a manual offline rollback, boot the Arch ISO, open LUKS, and mount the Btrfs top level:
 
 ```bash
 cryptsetup open /dev/nvme0n1p2 cryptroot
@@ -150,7 +134,13 @@ mount -o subvolid=5 /dev/mapper/cryptroot /mnt
 btrfs subvolume list /mnt
 ```
 
-After verifying `/mnt/@snapshots/NUMBER/snapshot`:
+Verify the selected snapshot exists at a path similar to:
+
+```text
+/mnt/@snapshots/NUMBER/snapshot
+```
+
+Then preserve the current root and create a writable snapshot as the new `@`:
 
 ```bash
 stamp=$(date +%Y%m%d-%H%M%S)
@@ -158,17 +148,46 @@ mv /mnt/@ "/mnt/@-broken-$stamp"
 btrfs subvolume snapshot /mnt/@snapshots/NUMBER/snapshot /mnt/@
 ```
 
-Remount the restored layout, chroot, rebuild UKIs and re-sign as applicable before booting. Keep `@-broken-*` until the restored system and personal data have been checked.
+The EFI System Partition is separate from Btrfs snapshots. Rebuild the UKIs from the restored root before rebooting so the kernel, initramfs, and modules agree. Remount the restored layout and enter it:
 
-## Reinstall
+```bash
+umount /mnt
+mount -o noatime,compress=zstd:1,subvol=@ /dev/mapper/cryptroot /mnt
+mkdir -p /mnt/{efi,home,var/log,var/cache/pacman/pkg,.snapshots}
+mount -o noatime,compress=zstd:1,subvol=@home /dev/mapper/cryptroot /mnt/home
+mount -o noatime,compress=zstd:1,subvol=@var_log /dev/mapper/cryptroot /mnt/var/log
+mount -o noatime,compress=zstd:1,subvol=@pkg /dev/mapper/cryptroot /mnt/var/cache/pacman/pkg
+mount -o noatime,compress=zstd:1,subvol=@snapshots /dev/mapper/cryptroot /mnt/.snapshots
+mount /dev/nvme0n1p1 /mnt/efi
+arch-chroot /mnt
+bootctl --esp-path=/efi update
+mkinitcpio -P
+sbctl sign-all
+sbctl verify
+exit
+```
 
-When repair is less trustworthy than rebuilding:
+Use the actual EFI partition when it is not `/dev/nvme0n1p1`. Only run the `sbctl` commands when the expected owner key is present under `/var/lib/sbctl/keys`; with Secure Boot disabled and no keys available, rebuild the UKIs and recover the signing setup separately.
 
-1. recover personal data;
-2. boot the current or recovery USB slot;
-3. let GitHub refresh the reviewed configuration, or deliberately use the cached snapshot;
-4. perform a fresh installation;
+Then unmount cleanly and reboot:
+
+```bash
+umount -R /mnt
+cryptsetup close cryptroot
+reboot
+```
+
+Do not delete the preserved `@-broken-*` subvolume until the restored system and personal data have been checked. A root rollback can leave package-database and separately mounted cache contents at different points; perform a full `pacman -Syu`, rebuild the UKIs, and verify signatures after recovery.
+
+## Reinstall while preserving reproducibility
+
+When recovery is slower or less trustworthy than rebuilding:
+
+1. recover personal data from backups;
+2. obtain the repository and its reviewed configuration;
+3. perform a fresh installation;
+4. run `archctl finish`;
 5. restore personal data separately;
-6. re-enroll Secure Boot and TPM for the new installation.
+6. enroll Secure Boot and TPM again for the new installation.
 
-Do not copy old TPM tokens or LUKS metadata blindly between installations.
+Do not restore an old TPM token or blindly copy LUKS metadata between installations.

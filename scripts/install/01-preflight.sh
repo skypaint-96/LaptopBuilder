@@ -4,8 +4,8 @@ preflight_install() {
   require_root
   require_commands \
     arch-chroot awk blkid btrfs cryptsetup curl efibootmgr findmnt genfstab \
-    lsblk mkfs.btrfs mkfs.fat mount od pacman pacstrap partprobe readlink sgdisk \
-    sha256sum stat swapon timedatectl udevadm umount wipefs
+    lsblk mkfs.btrfs mkfs.fat mount od pacman pacman-conf pacstrap partprobe readlink sgdisk \
+    stat swapon timedatectl udevadm umount wipefs
 
   [[ $(uname -m) == x86_64 ]] || die "Only x86_64 is supported."
 
@@ -53,11 +53,14 @@ preflight_install() {
   done < <(swapon --show=NAME --noheadings --raw)
 
   if secure_boot_enabled; then
-    die "Secure Boot is currently enabled. The official Arch ISO is not the signed final boot chain; disable Secure Boot for installation."
+    die "Secure Boot is currently enabled. This installer requires it disabled while owner keys are enrolled; disable Secure Boot and boot the ISO again."
   fi
 
   if bool_true "$ENABLE_SECURE_BOOT" && ! setup_mode_enabled; then
-    warn "Firmware is not currently in Secure Boot Setup Mode. Installation can continue, but 'archctl secure-boot' later requires Setup Mode."
+    if bool_true "$REQUIRE_SETUP_MODE_AT_INSTALL"; then
+      die "Secure Boot Setup Mode is required before installation. In firmware, disable Secure Boot and clear the enrolled Secure Boot keys, then boot the ISO again."
+    fi
+    warn "Firmware is not in Secure Boot Setup Mode. Owner-key enrollment will require another firmware visit after installation."
   fi
 
   if bool_true "$ENABLE_TPM"; then
@@ -69,14 +72,13 @@ preflight_install() {
     fi
   fi
 
-  if [[ ${INSTALL_SOURCE_RESOLVED:-online} == online ]]; then
-    info "Using current online Arch repositories."
-    network_available || die "The selected online package source is unreachable."
-    timedatectl set-ntp true || warn "Could not enable network time synchronisation in the ISO."
-  else
-    info "Using the checksum-verified offline package cache."
-    validate_offline_source
-  fi
+  info "Checking internet connectivity."
+  curl --connect-timeout 10 --max-time 30 --retry 2 -fsS https://archlinux.org/ -o /dev/null || die "Unable to reach archlinux.org."
+  timedatectl set-ntp true || warn "Could not enable network time synchronisation in the ISO."
+
+  enable_live_iso_multilib
+  verify_live_package_resolution
+  verify_aur_package_resolution
 
   printf '\n'
   print_config_summary

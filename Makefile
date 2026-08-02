@@ -1,8 +1,8 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: test lint config structure usb ansible powershell
+.PHONY: test lint config structure ansible powershell
 
-test: lint config structure usb ansible powershell
+test: lint config structure ansible powershell
 
 lint:
 	./tests/lint.sh
@@ -13,9 +13,9 @@ config:
 structure:
 	./tests/check-repo.sh
 	./tests/test-source-copy.sh
-
-usb:
-	./tests/test-usb.sh
+	./tests/test-upgrade-existing.sh
+	./tests/test-package-lists.sh
+	./tests/test-security-state.sh
 
 ansible:
 	./tests/ansible-syntax.sh

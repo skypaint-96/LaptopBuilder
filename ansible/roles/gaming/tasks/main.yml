@@ -12,9 +12,7 @@
       - vulkan-intel
   register: intel_gaming_packages
   changed_when: "'there is nothing to do' not in (intel_gaming_packages.stdout + intel_gaming_packages.stderr) | lower"
-  when:
-    - not packages_preinstalled | bool
-    - gpu_vendor == 'intel'
+  when: gpu_vendor == 'intel'
 
 - name: Install AMD Vulkan userspace
   ansible.builtin.command:
@@ -27,9 +25,7 @@
       - vulkan-radeon
   register: amd_gaming_packages
   changed_when: "'there is nothing to do' not in (amd_gaming_packages.stdout + amd_gaming_packages.stderr) | lower"
-  when:
-    - not packages_preinstalled | bool
-    - gpu_vendor == 'amd'
+  when: gpu_vendor == 'amd'
 
 - name: Install common Steam gaming userspace
   ansible.builtin.command:
@@ -47,4 +43,3 @@
       - vulkan-tools
   register: gaming_packages
   changed_when: "'there is nothing to do' not in (gaming_packages.stdout + gaming_packages.stderr) | lower"
-  when: not packages_preinstalled | bool

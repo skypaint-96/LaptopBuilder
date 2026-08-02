@@ -5,6 +5,7 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$REPO_ROOT/config/install.conf"
 PREFLIGHT_ONLY=false
 CLI_NONINTERACTIVE=false
+REBOOT_FIRMWARE=false
 
 usage() {
   cat <<'EOF'
@@ -14,6 +15,7 @@ Options:
   --config PATH       Installation configuration file
   --preflight-only    Validate the ISO, firmware, network, disk, and configuration only
   --non-interactive   Override NONINTERACTIVE=true (requires exact WIPE_CONFIRMATION)
+  --reboot-firmware   Enter firmware setup automatically after successful installation
   -h, --help          Show this help
 EOF
 }
@@ -33,6 +35,10 @@ while (($#)); do
       CLI_NONINTERACTIVE=true
       shift
       ;;
+    --reboot-firmware)
+      REBOOT_FIRMWARE=true
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -49,10 +55,6 @@ done
 source "$REPO_ROOT/scripts/lib/common.sh"
 # shellcheck source=scripts/lib/config.sh
 source "$REPO_ROOT/scripts/lib/config.sh"
-# shellcheck source=scripts/lib/packages.sh
-source "$REPO_ROOT/scripts/lib/packages.sh"
-# shellcheck source=scripts/lib/install-source.sh
-source "$REPO_ROOT/scripts/lib/install-source.sh"
 # shellcheck source=scripts/install/01-preflight.sh
 source "$REPO_ROOT/scripts/install/01-preflight.sh"
 # shellcheck source=scripts/install/10-disk.sh
@@ -68,7 +70,6 @@ if bool_true "$CLI_NONINTERACTIVE"; then
   NONINTERACTIVE=true
 fi
 validate_config install
-resolve_install_source
 
 INSTALL_COMPLETED=false
 cleanup_on_exit() {
@@ -98,6 +99,7 @@ read_secret_into INSTALL_USER_PASSWORD "$USER_PASSWORD_FILE" "Password for $USER
 prepare_disk
 install_base_system
 configure_base_system
+prepare_target_secure_boot
 create_efi_boot_entry
 
 sync
@@ -110,12 +112,18 @@ cat <<EOF
 Installation completed successfully.
 
 Next steps:
-  1. Reboot and remove the Arch installation media.
-  2. Unlock LUKS with the passphrase and log in as $USERNAME.
-  3. Run: archctl provision
-  4. Run: sudo archctl secure-boot
-  5. Reboot with Secure Boot enabled, then run: sudo archctl tpm-enroll
-  6. Run: sudo archctl verify
+  1. Reboot into firmware setup and enable Secure Boot without clearing or restoring keys.
+  2. Remove the Arch installation media and boot the installed system.
+  3. Unlock once with the retained LUKS passphrase and log in as $USERNAME.
+  4. Run: archctl finish
 
-The installed copy of this repository is /opt/arch-workstation.
+That single resumable command provisions the workstation, enrols TPM2 unlock, and
+runs the final audit. The installed repository is /opt/arch-workstation.
 EOF
+
+if bool_true "$REBOOT_FIRMWARE"; then
+  info "Requesting a reboot directly into firmware setup."
+  if ! systemctl reboot --firmware-setup; then
+    warn "The firmware-setup reboot request was not supported. Reboot normally and press the firmware setup key."
+  fi
+fi

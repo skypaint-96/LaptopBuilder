@@ -14,15 +14,20 @@ usage() {
 Usage: archctl [--config PATH] COMMAND [arguments]
 
 Commands:
+  finish                Resume the complete first-boot workflow (recommended)
+  status                Show the current first-boot/security stage
   provision             Apply Ansible roles and user-level configuration
-  secure-boot           Enroll owner keys and sign the EFI boot chain (root)
-  tpm-enroll            Enroll TPM2 unlock after Secure Boot is active (root)
-  tpm-remove            Remove TPM2 unlock and keep passphrase boot (root)
-  recovery-key          Add a high-entropy LUKS recovery key (root)
-  verify                Check storage, boot, security, services, and packages (root)
-  snapshot [TEXT]       Create a manual Snapper root snapshot (root)
+  secure-boot           Enrol owner keys and sign every EFI binary
+  tpm-enroll            Enrol TPM2 unlock after Secure Boot is active
+  tpm-remove            Remove TPM2 unlock and keep passphrase boot
+  recovery-key          Add a high-entropy LUKS recovery key
+  verify                Run the strict final installation/security audit
+  snapshot [TEXT]       Create a manual Snapper root snapshot
   update                Update official/AUR packages and signed boot assets
   help                  Show this help
+
+Commands that need root privilege elevate themselves. Run finish/provision as the
+configured normal user, not through sudo.
 EOF
 }
 
@@ -48,32 +53,73 @@ if (($#)); then shift; fi
 export ARCH_WORKSTATION_CONFIG="$CONFIG_FILE"
 export ARCH_WORKSTATION_ROOT="$REPO_ROOT"
 
+root_exec() {
+  local script=$1
+  shift
+  if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+    exec "$script" "$@"
+  fi
+  exec sudo env \
+    "ARCH_WORKSTATION_CONFIG=$CONFIG_FILE" \
+    "ARCH_WORKSTATION_ROOT=$REPO_ROOT" \
+    "$script" "$@"
+}
+
+user_exec() {
+  local script=$1
+  shift
+
+  if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+    exec "$script" "$@"
+  fi
+
+  # A common mistake is `sudo archctl finish`. Preserve the already-open sudo
+  # timestamp but run user-level package/configuration work as the caller.
+  if [[ -n ${SUDO_USER:-} && $SUDO_USER != root ]]; then
+    exec sudo -u "$SUDO_USER" -H env \
+      "ARCH_WORKSTATION_CONFIG=$CONFIG_FILE" \
+      "ARCH_WORKSTATION_ROOT=$REPO_ROOT" \
+      "$script" "$@"
+  fi
+
+  echo "Run '$COMMAND' as the configured normal user, not from a root shell." >&2
+  exit 1
+}
+
 case "$COMMAND" in
+  finish|first-boot)
+    user_exec "$REPO_ROOT/scripts/finish.sh" "$@"
+    ;;
+  status|doctor)
+    root_exec "$REPO_ROOT/scripts/security/status.sh" "$@"
+    ;;
   provision)
-    exec "$REPO_ROOT/scripts/provision.sh" "$@"
+    user_exec "$REPO_ROOT/scripts/provision.sh" "$@"
     ;;
   secure-boot)
-    exec "$REPO_ROOT/scripts/security/secure-boot.sh" "$@"
+    root_exec "$REPO_ROOT/scripts/security/secure-boot.sh" "$@"
     ;;
   tpm-enroll)
-    exec "$REPO_ROOT/scripts/security/tpm-enroll.sh" "$@"
+    root_exec "$REPO_ROOT/scripts/security/tpm-enroll.sh" "$@"
     ;;
   tpm-remove)
-    exec "$REPO_ROOT/scripts/security/tpm-remove.sh" "$@"
+    root_exec "$REPO_ROOT/scripts/security/tpm-remove.sh" "$@"
     ;;
   recovery-key)
-    exec "$REPO_ROOT/scripts/security/recovery-key.sh" "$@"
+    root_exec "$REPO_ROOT/scripts/security/recovery-key.sh" "$@"
     ;;
   verify)
-    exec "$REPO_ROOT/scripts/security/verify.sh" "$@"
+    root_exec "$REPO_ROOT/scripts/security/verify.sh" "$@"
     ;;
   snapshot)
-    [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "snapshot must run as root" >&2; exit 1; }
     description=${*:-"Manual snapshot"}
-    exec snapper -c root create --description "$description" --cleanup-algorithm number --print-number
+    if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+      exec snapper -c root create --description "$description" --cleanup-algorithm number --print-number
+    fi
+    exec sudo snapper -c root create --description "$description" --cleanup-algorithm number --print-number
     ;;
   update)
-    exec "$REPO_ROOT/scripts/update.sh" "$@"
+    user_exec "$REPO_ROOT/scripts/update.sh" "$@"
     ;;
   help)
     usage

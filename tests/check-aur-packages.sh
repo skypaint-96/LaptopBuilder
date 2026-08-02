@@ -11,11 +11,11 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/common.sh"
 # shellcheck source=../scripts/lib/config.sh
 source "$ROOT/scripts/lib/config.sh"
-# shellcheck source=../scripts/lib/packages.sh
-source "$ROOT/scripts/lib/packages.sh"
 
 load_config "$ROOT/config/install.conf.example"
-collect_aur_packages packages
+validate_config runtime
+read -r -a packages <<< "$AUR_PACKAGES"
+packages=("$AUR_HELPER_PACKAGE" "${packages[@]}")
 
 curl_args=(
   --fail

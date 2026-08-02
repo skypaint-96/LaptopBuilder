@@ -2,7 +2,7 @@
 - name: Provision the Arch workstation
   hosts: workstation
   connection: local
-  become: true
+  become: false
   gather_facts: true
 
   pre_tasks:

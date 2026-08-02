@@ -28,7 +28,6 @@
       - zip
   register: common_packages
   changed_when: "'there is nothing to do' not in (common_packages.stdout + common_packages.stderr) | lower"
-  when: not packages_preinstalled | bool
 
 - name: Create user configuration directories
   ansible.builtin.file:

@@ -10,7 +10,6 @@
       - snapper
   register: snapshot_packages
   changed_when: "'there is nothing to do' not in (snapshot_packages.stdout + snapshot_packages.stderr) | lower"
-  when: not packages_preinstalled | bool
 
 - name: Ensure Snapper configuration directory exists
   ansible.builtin.file:
@@ -30,7 +29,8 @@
 
 - name: Register the root Snapper configuration
   ansible.builtin.copy:
-    content: 'SNAPPER_CONFIGS="root"\n'
+    content: |
+      SNAPPER_CONFIGS="root"
     dest: /etc/conf.d/snapper
     owner: root
     group: root

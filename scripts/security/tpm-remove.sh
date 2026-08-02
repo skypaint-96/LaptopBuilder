@@ -24,13 +24,7 @@ trap - EXIT
 
 warn "Removing all systemd TPM2 enrollments from $luks_device."
 systemd-cryptenroll --wipe-slot=tpm2 "$luks_device"
-crypt_options="luks"
-if bool_true "$ENABLE_SSD_TRIM"; then
-  crypt_options+=",discard"
-fi
-cat > /etc/crypttab.initramfs <<EOF
-cryptroot UUID=$LUKS_UUID none $crypt_options
-EOF
-chmod 0600 /etc/crypttab.initramfs
+write_passphrase_crypttab
 rebuild_and_sign_ukis
+rm -f "$STATE_DIR/tpm-enrolled" "$STATE_DIR/complete"
 success "TPM2 enrollment removed. Boot now uses a LUKS passphrase."

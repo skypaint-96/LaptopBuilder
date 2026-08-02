@@ -20,7 +20,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes shellcheck
-          python3 -m pip install --disable-pip-version-check -r tests/requirements.txt
+          python3 -m pip install --disable-pip-version-check ansible-core -r tests/requirements.txt
 
       - name: Require PowerShell parser
         run: command -v pwsh

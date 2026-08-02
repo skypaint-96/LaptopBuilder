@@ -1,151 +1,152 @@
 # Architecture
 
-## Design goals
+## Goals
 
-The workstation is a reproducible result of versioned policy, not a precious disk image. The installer USB adds local recovery generations so loss of Internet or a bad update does not remove the ability to boot.
+The repository treats the workstation as a reproducible result of versioned configuration rather than as a disk image. The design favours conventional Arch components, transparent scripts, a recovery passphrase, and staged security changes.
 
-The design distinguishes three operations:
+It has two different idempotency models:
 
-- `usb/create-usb.sh` is destructive to one selected USB disk.
-- `install.sh` is destructive to one selected target disk and is intentionally not idempotent.
-- refresh, provision, configuration, signing, verification and update operations are intended to be repeatable.
+- `install.sh` is intentionally destructive and is **not** idempotent. It owns one whole disk.
+- `archctl finish`, provisioning, the Ansible roles, PowerShell/VS Code configuration, signing, TPM enrolment, verification, and updates are designed to be re-run.
 
-## End-to-end flow
+## Build stages
 
 ```text
-Existing Linux host
-  -> create one UEFI FAT32 installer USB
-       -> GRUB removable loader
-       -> Arch live slot A
-       -> Arch live slot B
-       -> repository current + previous
-       -> optional package repositories
-
-USB boot
-  -> stable local start.sh
-       -> GitHub update when valid/reachable
-       -> otherwise current/previous local snapshot
-       -> repository machine profile, otherwise local profile
-       -> check official current Arch ISO
-       -> write/verify non-running live slot
-       -> switch next boot only after success
-
-Target install
-  -> GPT
-  -> ESP + LUKS2
-  -> Btrfs subvolumes
-  -> complete official package set
-  -> offline AUR binaries when applicable
-  -> UKIs + systemd-boot
-
-First installed boot
-  -> Ansible/service/dotfile provisioning
-  -> online AUR review when not already cached
-  -> Secure Boot owner-key enrollment and signing
-  -> recovery key
-  -> TPM2 PCR 7 + PIN enrollment
+Official Arch ISO, firmware already in Setup Mode
+    |
+    +-- Bash preflight
+    |       firmware/TPM/disk checks
+    |       multilib sync
+    |       complete official + AUR package-name resolution
+    |
+    +-- Whole-disk installation
+    |       GPT -> ESP + LUKS2 -> Btrfs
+    |       base system -> Xfce/X11 -> systemd-boot -> UKIs
+    |       sbctl owner-key enrollment -> sign/register every EFI binary
+    |
+Firmware: enable Secure Boot without replacing the enrolled keys
+    |
+First boot with the retained LUKS passphrase
+    |
+    +-- `archctl finish`
+            one sudo session
+            Ansible official-package/service provisioning
+            non-root AUR, VS Code, and PowerShell configuration
+            complete boot-chain rebuild/sign/verification
+            TPM2 enrollment (PCR 7 + optional PIN)
+            strict final audit
 ```
 
-## USB A/B model
+Secure Boot owner-key preparation happens before first boot, while firmware is already in Setup Mode. TPM enrollment remains after the first verified Secure Boot boot so the token is bound to the intended measured policy.
 
-`arch-a` and `arch-b` are complete extracted official Arch live trees. GRUB reads `MASON-ARCH/state/active-slot.cfg` to select the normal entry and offers the other slot as recovery.
+## Platform baseline
 
-The refresh command identifies the running slot from the kernel command line. It downloads and verifies the current ISO, extracts to `arch-OTHER.new`, validates required kernel/initramfs/squashfs/signature files, rotates the old non-running slot and only then changes `active-slot.cfg`.
-
-The running slot is never changed. A power or download failure therefore leaves it bootable. FAT32 does not provide transactional updates, so the sequence uses same-filesystem staging, verification and rollback directories rather than claiming true atomicity.
-
-## Repository generations
-
-The stable USB loader resolves the configured branch, tag or pin to a full GitHub commit and downloads that immutable commit archive. It accepts the repository only after:
-
-- the configured ref or pinned commit resolves;
-- required installer files exist;
-- the configured machine profile exists;
-- every Bash script passes `bash -n`;
-- a local source archive is created and checksumed.
-
-The accepted `current` archive rotates to `previous`. Startup verifies current first, then previous. The new repository code runs from tmpfs under `/run/mason-installer/repo`; the cache archive remains the source generation. The accepted commit identifier is passed through installation and written to `/opt/arch-workstation/BUILD_COMMIT`.
-
-## Storage layout on the target
-
-| GPT partition | Format | Purpose |
+| Component | Choice | Reason |
 |---|---|---|
-| 1 | FAT32, 1 GiB | EFI System Partition mounted at `/efi` |
-| 2 | LUKS2 | Encrypted Btrfs container |
+| Distribution | Vanilla Arch Linux | Direct Arch packaging and documentation; no derivative-specific installer state |
+| Architecture | x86-64 | Matches the T480 and requested modular x64 scope |
+| Firmware | UEFI/GPT only | Modern boot path required by the Secure Boot and UKI design |
+| Desktop | Xfce | Mature, relatively small, and conventional |
+| Display system | X11 | Broad compatibility; Xfce's Wayland path remains experimental rather than the default baseline |
+| Kernels | `linux` and `linux-lts` | Current hardware/software support plus a second kernel for recovery |
+| Root filesystem | Btrfs | Compression, subvolumes, and Snapper snapshots without a separate volume manager |
+| Encryption | LUKS2 | Supported by systemd early boot and TPM token enrollment |
+| Boot manager | systemd-boot | Small UEFI-native loader with automatic UKI discovery |
+| Initramfs/UKI | mkinitcpio + ukify | Arch-native generation of self-contained EFI kernel images |
+| Provisioning | Ansible Core | Desired-state-style, readable local roles without a permanent agent |
+| User automation | PowerShell 7 | Cross-platform profile and optional module management |
+| AUR helper | `paru` via `paru-bin` | Small explicit AUR allow-list; automated prompts are configurable |
 
-Btrfs subvolumes:
+## Storage layout
+
+The installer consumes the configured whole disk.
+
+| GPT partition | Typical device | Format | Mount/use |
+|---|---|---|---|
+| 1 | `/dev/nvme0n1p1` | FAT32, 1 GiB | EFI System Partition at `/efi` |
+| 2 | `/dev/nvme0n1p2` | LUKS2 | Encrypted container for Btrfs |
+
+Inside the opened LUKS mapping:
 
 | Subvolume | Mount point | Purpose |
 |---|---|---|
-| `@` | `/` | Operating-system root |
+| `@` | `/` | Operating system root |
 | `@home` | `/home` | User data and configuration |
-| `@var_log` | `/var/log` | Logs independent of root rollback |
-| `@pkg` | `/var/cache/pacman/pkg` | Package cache independent of root rollback |
-| `@snapshots` | `/.snapshots` | Snapper storage |
+| `@var_log` | `/var/log` | Logs survive root rollback independently |
+| `@pkg` | `/var/cache/pacman/pkg` | Package cache survives root rollback independently |
+| `@snapshots` | `/.snapshots` | Snapper snapshot storage |
 
-Mounts use `noatime` and `compress=zstd:1`. zram replaces a disk swap partition. Hibernation is deliberately omitted.
+Mount options use `noatime` and `compress=zstd:1`. Hibernation is deliberately omitted; zram provides compressed swap without adding encrypted Btrfs swapfile and resume complexity.
 
-## Installed boot chain
+When `ENABLE_SSD_TRIM=true`, weekly `fstrim.timer` is enabled and the dm-crypt mapping permits discard propagation. See the leakage trade-off in [SECURITY.md](SECURITY.md).
+
+## Boot chain
 
 ```text
-UEFI trust database
-  -> signed systemd-boot
-       -> signed Unified Kernel Image
-            -> kernel + microcode + initramfs + command line
-                 -> systemd initramfs unlocks LUKS2
-                      -> Btrfs @ root
+UEFI firmware trust database
+    -> signed systemd-boot EFI binary
+        -> signed Unified Kernel Image in /efi/EFI/Linux
+            -> kernel + microcode + initramfs + kernel command line
+                -> systemd initramfs unlocks LUKS2
+                    -> Btrfs subvolume @ mounted as root
 ```
 
-The normal and LTS UKIs are:
+Each configured kernel receives a UKI:
 
 ```text
 /efi/EFI/Linux/arch-linux.efi
 /efi/EFI/Linux/arch-linux-lts.efi
 ```
 
+systemd-boot discovers these automatically. The normal kernel is the default; the LTS image remains selectable from the boot menu.
+
+The repository configures mkinitcpio's systemd-based hooks, embeds microcode, and uses `/etc/crypttab.initramfs`. Once owner keys exist, `/etc/kernel/uki.conf` tells ukify where the Secure Boot private key and certificate live, while `sbctl` also signs and records all EFI binaries for future re-signing.
+
 ## Configuration layers
 
-1. `config/usb.conf` controls GitHub, update and cache behaviour on the installer USB.
-2. `profiles/t480.conf` is the version-controlled machine policy.
-3. `MASON-ARCH/config/install.conf` is the emergency local fallback.
-4. Bash owns disk creation, base installation and early boot.
-5. `scripts/lib/packages.sh` generates the complete package set for online install, offline caching and CI resolution.
-6. Ansible owns repeatable services, machine policy and dotfiles after first boot.
-7. PowerShell and VS Code scripts own user-level configuration.
-8. `archctl` exposes stable operational commands.
+1. A reviewed local `config/install.conf` contains machine and policy choices during installation. The installed single source of truth is `/etc/arch-installer/install.conf`, with a repository symlink pointing to it.
+2. Bash creates the storage, base operating system, users, early boot, initial services, and enough desktop policy/keyring integration to reconnect networking before provisioning.
+3. `ansible/site.yml` composes modular roles for common tools, desktop integration, development, Docker, gaming, snapshots, and T480 settings.
+4. `scripts/install-aur.sh` handles the explicitly allowed AUR packages as the non-root user.
+5. `powershell/Configure-Workstation.ps1` installs a managed profile loader and optional modules.
+6. `scripts/configure-vscode.sh` installs deterministic user settings and extension IDs.
+7. `archctl` exposes stable operational commands after installation.
 
-## Package-source model
+## Package-source policy
 
-Online target installation uses official Arch repositories for the complete official set. AUR applications are reviewed and built later by `paru`.
+Official Arch repositories are used whenever a package exists there. The requested Microsoft desktop applications are represented by AUR packages:
 
-Offline installation uses two local pacman repositories:
+- `microsoft-edge-stable-bin`
+- `visual-studio-code-bin`
+- `powershell-bin`
 
-- `workstation` for official package files and dependencies;
-- `workstation-aur` for previously reviewed/built AUR package files.
+The AUR is not an official binary repository. The default workflow bootstraps `paru-bin` and builds/installs the explicit allow-list as the normal user, using the existing sudo session only where package installation requires it. Routine review prompts are suppressed by default for reduced intervention; `AUR_NONINTERACTIVE=false` restores manual review.
 
-Cache creation validates the staged pair against an empty pacman database before activation, flushes the new files, and retains `.old` directories until the activated generation has passed verification. Startup recognises and repairs the supported interrupted-activation states.
+For Steam, the gaming role installs an explicit Intel or AMD native and 32-bit Vulkan provider before installing `steam`. This prevents an ambiguous virtual-driver dependency from selecting an unsuitable provider. Gaming therefore requires multilib and does not accept the generic GPU profile.
 
-The USB manifest detects corruption and incomplete transfers. It is not a signature from a separate trust root; physical write access can replace content and its manifest.
+## Modularity boundaries
 
-## Supported boundaries
+The installer currently supports:
 
-Implemented:
+- Intel or AMD x86-64 CPU microcode profiles;
+- Intel, AMD, or generic open-source graphics userspace profiles, with gaming limited to the explicit Intel and AMD profiles;
+- optional Docker, gaming, snapshots, Bluetooth, SSH server, and T480 policy;
+- configurable AUR and user-tool stages.
 
-- x86-64 UEFI;
-- Intel or AMD CPU microcode;
-- Intel, AMD or generic Mesa graphics profiles, with gaming limited to Intel/AMD;
-- T480 profile;
-- optional Docker, gaming, snapshots, Bluetooth and SSH server;
-- online-first and complete offline target installation;
-- local A/B live recovery and repository generation fallback.
+The following are intentionally not implemented:
 
-Not implemented:
-
-- dual boot or partition preservation;
-- BIOS/CSM;
+- dual boot or preserving existing partitions;
+- BIOS/CSM boot;
 - NVIDIA proprietary/hybrid graphics;
 - hibernation;
-- cryptographic remote attestation of the Git branch;
-- tamper-resistant USB storage;
-- automatic booting of Btrfs snapshots;
-- unattended Secure Boot key enrollment.
+- remote fleet management;
+- automatic rollback boot entries;
+- firmware Setup Mode entry or Secure Boot enforcement without physical firmware interaction.
+
+These limits keep the first version reviewable and reduce destructive ambiguity.
+
+## Resumable first-boot state machine
+
+`archctl status --stage` derives state from real evidence rather than a linear script counter: the provisioning marker, Setup Mode, local owner keys, complete EFI verification, active Secure Boot, and a LUKS2 systemd TPM token. `archctl finish` repeatedly applies the next safe transition and can be rerun after a reboot or interrupted package operation.
+
+Fresh installs normally enter first boot with the Secure Boot keys and files already prepared. The expected path is therefore `provision` -> `enroll-tpm` -> `complete` when Secure Boot was enabled before boot.

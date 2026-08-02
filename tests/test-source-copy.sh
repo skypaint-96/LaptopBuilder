@@ -29,6 +29,8 @@ copy_repository_to_target
 target="$INSTALL_ROOT/opt/arch-workstation"
 [[ -r $target/README.md ]] || { echo 'Tracked repository files were not copied.' >&2; exit 1; }
 [[ -x $target/install.sh ]] || { echo 'Installer executable mode was not preserved.' >&2; exit 1; }
+[[ -x $target/start.sh ]] || { echo 'Compatibility start wrapper was not copied as executable.' >&2; exit 1; }
+[[ -x $target/upgrade-existing.sh ]] || { echo 'Upgrade helper was not copied as executable.' >&2; exit 1; }
 [[ -x $target/scripts/provision.sh ]] || { echo 'Script executable mode was not restored.' >&2; exit 1; }
 [[ -r $target/config/install.conf ]] || { echo 'Runtime configuration was not staged.' >&2; exit 1; }
 [[ ! -e $target/.git ]] || { echo 'Git internals were copied into the target.' >&2; exit 1; }
@@ -45,20 +47,5 @@ else
   grep -qx 'source-archive' "$target/BUILD_COMMIT" \
     || { echo 'Archive provenance marker was not recorded.' >&2; exit 1; }
 fi
-
-# A USB/GitHub installation has no .git directory in the runtime snapshot.
-# The stable loader passes the exact accepted commit through the environment.
-usb_commit=0123456789abcdef0123456789abcdef01234567
-INSTALL_ROOT="$temp_dir/target-usb"
-mkdir -p "$INSTALL_ROOT"
-MASON_REPO_COMMIT=$usb_commit
-copy_repository_to_target
-unset MASON_REPO_COMMIT
-[[ $(<"$INSTALL_ROOT/opt/arch-workstation/BUILD_COMMIT") == "$usb_commit" ]] \
-  || { echo 'USB repository commit provenance was not preserved.' >&2; exit 1; }
-[[ ! -e $INSTALL_ROOT/opt/arch-workstation/config/source-copy-probe.secret ]] \
-  || { echo 'Archive-mode source copy included an excluded secret.' >&2; exit 1; }
-[[ ! -e $INSTALL_ROOT/opt/arch-workstation/config/usb.conf ]] \
-  || { echo 'Archive-mode source copy included local USB policy.' >&2; exit 1; }
 
 echo 'Installed source snapshot test passed.'

@@ -24,15 +24,17 @@ DESKTOP="xfce"
 ENABLE_MULTILIB=true
 # Periodic TRIM through dm-crypt improves SSD maintenance but exposes which blocks are unused.
 ENABLE_SSD_TRIM=true
-# Add official repository packages without changing installer code.
-EXTRA_OFFICIAL_PACKAGES=""
 ENABLE_AUR=true
 AUR_HELPER="paru"
-# Build the helper from its reviewed source package so it links against the current pacman/libalpm.
-AUR_HELPER_PACKAGE="paru"
+# paru-bin is the upstream-maintained prebuilt AUR package. It avoids compiling
+# Paru and therefore avoids the Rust/Cargo provider prompt during first boot.
+AUR_HELPER_PACKAGE="paru-bin"
 AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin"
-# Leave false to review AUR build files and prompts interactively.
-AUR_NONINTERACTIVE=false
+# Automated mode trusts only the explicit allow-list above and skips routine
+# PKGBUILD/rebuild prompts. Set false when you want to review every AUR build.
+AUR_NONINTERACTIVE=true
+# Suppress routine pacman confirmations during the reproducible first-boot run.
+PROVISION_NONINTERACTIVE=true
 
 ENABLE_DOCKER=true
 # Membership of the docker group is convenient but effectively root-equivalent.
@@ -48,11 +50,12 @@ ENABLE_BLUETOOTH=true
 ENABLE_SSH=false
 
 ENABLE_SECURE_BOOT=true
+# Requiring Setup Mode before disk changes lets the installer enrol owner keys
+# and sign the complete boot chain automatically, before the first reboot.
+REQUIRE_SETUP_MODE_AT_INSTALL=true
+AUTO_PREPARE_SECURE_BOOT=true
 # Retaining Microsoft UEFI certificates is the compatibility-oriented default.
 SBCTL_ENROLL_MICROSOFT=true
-# Required only for unattended key enrollment. Normal interactive runs prompt.
-SECURE_BOOT_CONFIRMATION=""
-
 ENABLE_TPM=true
 REQUIRE_TPM=true
 # PCR 7 measures the Secure Boot policy and remains practical across kernel updates.
@@ -68,13 +71,6 @@ T480_STOP_CHARGE=80
 # files whose permissions are 0400 or 0600. Only the first line is read.
 LUKS_PASSPHRASE_FILE=""
 USER_PASSWORD_FILE=""
-
-# Installation source. The USB launcher overrides these values in a temporary
-# runtime copy. auto uses current mirrors when reachable, then the USB cache.
-INSTALL_SOURCE_MODE="auto"
-OFFLINE_REPO_PATH=""
-OFFLINE_AUR_REPO_PATH=""
-NETWORK_CHECK_URL="https://archlinux.org/"
 
 # Safety controls. Keep NONINTERACTIVE=false for normal use.
 NONINTERACTIVE=false

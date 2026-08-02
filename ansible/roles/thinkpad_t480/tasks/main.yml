@@ -19,7 +19,6 @@
       - tlp-rdw
   register: t480_packages
   changed_when: "'there is nothing to do' not in (t480_packages.stdout + t480_packages.stderr) | lower"
-  when: not packages_preinstalled | bool
 
 - name: Install conservative T480 TLP settings
   ansible.builtin.template:

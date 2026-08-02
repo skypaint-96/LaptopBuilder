@@ -1,0 +1,3 @@
+# Functions in the sourced library/stage files are intentionally consumed by
+# several different entry points, so per-entry-point unused-function analysis is noisy.
+disable=SC2329

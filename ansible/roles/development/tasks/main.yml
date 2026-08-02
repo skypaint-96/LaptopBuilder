@@ -16,7 +16,6 @@
       - vim
   register: development_packages
   changed_when: "'there is nothing to do' not in (development_packages.stdout + development_packages.stderr) | lower"
-  when: not packages_preinstalled | bool
 
 - name: Create the .NET NuGet directory
   ansible.builtin.file:

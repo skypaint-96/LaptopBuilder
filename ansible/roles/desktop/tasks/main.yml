@@ -15,7 +15,6 @@
       - xdg-desktop-portal-gtk
   register: desktop_packages
   changed_when: "'there is nothing to do' not in (desktop_packages.stdout + desktop_packages.stderr) | lower"
-  when: not packages_preinstalled | bool
 
 - name: Ensure graphical login is enabled
   ansible.builtin.systemd_service:

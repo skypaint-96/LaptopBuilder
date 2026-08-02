@@ -18,7 +18,3 @@ dist/
 .vscode/
 .idea/
 *~
-config/usb.conf
-*.iso
-*.img
-.usb-build/

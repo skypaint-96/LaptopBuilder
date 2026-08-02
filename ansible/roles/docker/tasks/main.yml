@@ -11,7 +11,6 @@
       - docker-compose
   register: docker_packages
   changed_when: "'there is nothing to do' not in (docker_packages.stdout + docker_packages.stderr) | lower"
-  when: not packages_preinstalled | bool
 
 - name: Enable Docker
   ansible.builtin.systemd_service:

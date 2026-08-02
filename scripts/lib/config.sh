@@ -16,12 +16,12 @@ set_config_defaults() {
 
   ENABLE_MULTILIB=true
   ENABLE_SSD_TRIM=true
-  EXTRA_OFFICIAL_PACKAGES=""
   ENABLE_AUR=true
   AUR_HELPER="paru"
-  AUR_HELPER_PACKAGE="paru"
+  AUR_HELPER_PACKAGE="paru-bin"
   AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin"
-  AUR_NONINTERACTIVE=false
+  AUR_NONINTERACTIVE=true
+  PROVISION_NONINTERACTIVE=true
 
   ENABLE_DOCKER=true
   DOCKER_ADD_USER_TO_GROUP=true
@@ -35,8 +35,9 @@ set_config_defaults() {
   ENABLE_SSH=false
 
   ENABLE_SECURE_BOOT=true
+  REQUIRE_SETUP_MODE_AT_INSTALL=true
+  AUTO_PREPARE_SECURE_BOOT=true
   SBCTL_ENROLL_MICROSOFT=true
-  SECURE_BOOT_CONFIRMATION=""
   ENABLE_TPM=true
   REQUIRE_TPM=true
   TPM_PCRS="7"
@@ -51,13 +52,6 @@ set_config_defaults() {
   NONINTERACTIVE=false
   WIPE_CONFIRMATION=""
   ALLOW_NON_ARCHISO=false
-
-  # Selected by the USB launcher. auto prefers current Arch repositories and
-  # falls back to a complete checksum-verified package cache when present.
-  INSTALL_SOURCE_MODE="auto"
-  OFFLINE_REPO_PATH=""
-  OFFLINE_AUR_REPO_PATH=""
-  NETWORK_CHECK_URL="https://archlinux.org/"
 }
 
 load_config() {
@@ -77,6 +71,16 @@ validate_bool() {
     1|0|true|false|yes|no|on|off) ;;
     *) die "$name must be a boolean, not: $value" ;;
   esac
+}
+
+validate_package_list() {
+  local name=$1 value=${!1} package
+  local -a packages
+  read -r -a packages <<< "$value"
+  for package in "${packages[@]}"; do
+    [[ $package =~ ^[a-zA-Z0-9@._+:-]+$ && $package != -* ]] \
+      || die "$name contains an invalid package token: $package"
+  done
 }
 
 validate_config() {
@@ -102,23 +106,22 @@ validate_config() {
   [[ $FILESYSTEM == btrfs ]] || die "Only FILESYSTEM=btrfs is currently supported."
   [[ $DESKTOP == xfce ]] || die "Only DESKTOP=xfce is currently supported."
   [[ -n $KERNELS ]] || die "At least one kernel is required."
+  validate_package_list KERNELS
+  validate_package_list AUR_PACKAGES
   [[ $AUR_HELPER == paru ]] || die "Only AUR_HELPER=paru is currently supported."
-  [[ $AUR_HELPER_PACKAGE =~ ^[A-Za-z0-9@._+:-]+$ ]] \
-    || die "AUR_HELPER_PACKAGE is not a valid package name."
-  [[ $INSTALL_SOURCE_MODE == auto || $INSTALL_SOURCE_MODE == online || $INSTALL_SOURCE_MODE == offline ]] \
-    || die "INSTALL_SOURCE_MODE must be auto, online, or offline."
-  [[ $NETWORK_CHECK_URL == http://* || $NETWORK_CHECK_URL == https://* ]] \
-    || die "NETWORK_CHECK_URL must be an HTTP(S) URL."
+  [[ $AUR_HELPER_PACKAGE == paru || $AUR_HELPER_PACKAGE == paru-bin ]] \
+    || die "AUR_HELPER_PACKAGE must be paru or paru-bin."
   [[ $TPM_PCRS =~ ^[0-9]+([+][0-9]+)*$ ]] || die "TPM_PCRS must look like 7 or 7+11."
   [[ $T480_START_CHARGE =~ ^[0-9]+$ && $T480_STOP_CHARGE =~ ^[0-9]+$ ]] || die "Battery thresholds must be integers."
   ((T480_START_CHARGE >= 0 && T480_START_CHARGE < T480_STOP_CHARGE && T480_STOP_CHARGE <= 100)) || die "Invalid T480 battery threshold range."
 
   for boolean in \
-    ENABLE_MULTILIB ENABLE_SSD_TRIM ENABLE_AUR AUR_NONINTERACTIVE ENABLE_DOCKER DOCKER_ADD_USER_TO_GROUP \
-    ENABLE_GAMING ENABLE_SNAPSHOTS ENABLE_T480 ENABLE_POWERSHELL_PROFILE \
-    INSTALL_POWERSHELL_MODULES INSTALL_VSCODE_EXTENSIONS ENABLE_BLUETOOTH ENABLE_SSH \
-    ENABLE_SECURE_BOOT SBCTL_ENROLL_MICROSOFT ENABLE_TPM REQUIRE_TPM TPM_WITH_PIN \
-    T480_BATTERY_THRESHOLDS NONINTERACTIVE ALLOW_NON_ARCHISO; do
+    ENABLE_MULTILIB ENABLE_SSD_TRIM ENABLE_AUR AUR_NONINTERACTIVE PROVISION_NONINTERACTIVE \
+    ENABLE_DOCKER DOCKER_ADD_USER_TO_GROUP ENABLE_GAMING ENABLE_SNAPSHOTS ENABLE_T480 \
+    ENABLE_POWERSHELL_PROFILE INSTALL_POWERSHELL_MODULES INSTALL_VSCODE_EXTENSIONS \
+    ENABLE_BLUETOOTH ENABLE_SSH ENABLE_SECURE_BOOT REQUIRE_SETUP_MODE_AT_INSTALL \
+    AUTO_PREPARE_SECURE_BOOT SBCTL_ENROLL_MICROSOFT ENABLE_TPM REQUIRE_TPM TPM_WITH_PIN T480_BATTERY_THRESHOLDS \
+    NONINTERACTIVE ALLOW_NON_ARCHISO; do
     validate_bool "$boolean"
   done
 
@@ -127,6 +130,12 @@ validate_config() {
   fi
   if bool_true "$ENABLE_GAMING" && [[ $GPU_VENDOR == generic ]]; then
     die "ENABLE_GAMING=true requires GPU_VENDOR=intel or amd so the Vulkan provider is explicit."
+  fi
+  if bool_true "$AUTO_PREPARE_SECURE_BOOT" && ! bool_true "$ENABLE_SECURE_BOOT"; then
+    die "AUTO_PREPARE_SECURE_BOOT=true requires ENABLE_SECURE_BOOT=true."
+  fi
+  if bool_true "$AUTO_PREPARE_SECURE_BOOT" && ! bool_true "$REQUIRE_SETUP_MODE_AT_INSTALL"; then
+    die "AUTO_PREPARE_SECURE_BOOT=true requires REQUIRE_SETUP_MODE_AT_INSTALL=true."
   fi
   if bool_true "$ENABLE_TPM" && ! bool_true "$ENABLE_SECURE_BOOT"; then
     die "ENABLE_TPM=true requires ENABLE_SECURE_BOOT=true in this measured-boot design."
@@ -141,7 +150,7 @@ validate_config() {
 }
 
 print_config_summary() {
-  cat <<EOF_SUMMARY
+  cat <<EOF
 Install target : $DISK
 Host/user      : $HOSTNAME / $USERNAME
 Locale         : $LOCALE, $TIMEZONE, keymap $KEYMAP
@@ -149,12 +158,14 @@ Hardware       : CPU $CPU_VENDOR, GPU $GPU_VENDOR
 Storage        : GPT, ${ESP_SIZE_MIB} MiB ESP, LUKS2, Btrfs
 Kernels        : $KERNELS
 Desktop        : Xfce on X11
-Secure Boot    : $ENABLE_SECURE_BOOT (Microsoft certificates: $SBCTL_ENROLL_MICROSOFT)
+Secure Boot    : $ENABLE_SECURE_BOOT (Setup Mode required now: $REQUIRE_SETUP_MODE_AT_INSTALL)
+Auto SB prepare : $AUTO_PREPARE_SECURE_BOOT
+Microsoft certs: $SBCTL_ENROLL_MICROSOFT
 TPM2           : $ENABLE_TPM (PCRs: $TPM_PCRS, PIN: $TPM_WITH_PIN)
 Snapshots      : $ENABLE_SNAPSHOTS
 SSD TRIM       : $ENABLE_SSD_TRIM
 Docker/gaming  : $ENABLE_DOCKER / $ENABLE_GAMING
+AUR bootstrap  : $AUR_HELPER_PACKAGE (non-interactive: $AUR_NONINTERACTIVE)
 SSH server     : $ENABLE_SSH
-Install source : ${INSTALL_SOURCE_RESOLVED:-$INSTALL_SOURCE_MODE}
-EOF_SUMMARY
+EOF
 }

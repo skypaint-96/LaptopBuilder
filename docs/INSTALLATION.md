@@ -1,78 +1,74 @@
 # Installation guide
 
-This guide installs a complete Arch workstation onto one whole x86-64 disk. The target partition table and all target data are deleted.
+This guide describes the version 0.2 fresh-install flow. The installer is destructive and supports a single x86-64 UEFI disk only.
 
-The preferred path is the repository's self-updating USB. A manual official-ISO path remains available for recovery or development.
+## 1. Back up and prepare firmware
 
-## 1. Prepare safely
+Back up every file on the target disk. For a ThinkPad T480, update BIOS and Thunderbolt firmware before replacing the existing operating system where practical.
 
-- Back up personal files and open the backup from another machine.
-- Keep the LUKS passphrase and later recovery key outside the laptop.
-- Update T480 firmware, including Thunderbolt firmware, before replacing the existing system.
-- Connect AC power.
-- Test the first release on a spare SSD where practical.
-- Read [SECURITY.md](SECURITY.md), especially the GitHub and mutable-USB trust boundaries.
+Enter firmware setup with **F1** and configure:
 
-Confirm the intended target disk and USB by model and serial rather than relying only on names such as `/dev/nvme0n1` or `/dev/sdb`.
+| Setting | Required state |
+|---|---|
+| Boot mode | UEFI only |
+| Legacy/CSM | Disabled |
+| TPM/Security Chip | Enabled |
+| Secure Boot enforcement | Disabled |
+| Secure Boot key state | Keys cleared; Setup Mode enabled |
 
-## 2. Create the installer USB
+Clearing the keys before installation is intentional. It lets the installer enrol the new owner keys and sign the boot chain while the target is still mounted. Do not restore factory keys afterward. Microsoft certificates are included in the new trust store by default for firmware and option-ROM compatibility.
 
-Follow [USB-INSTALLER.md](USB-INSTALLER.md). The normal command is:
+## 2. Boot and connect the Arch ISO
+
+Boot the official Arch ISO in UEFI mode. Confirm:
 
 ```bash
-cp config/usb.conf.example config/usb.conf
-vim config/usb.conf
-vim profiles/t480.conf
-
-sudo ./usb/create-usb.sh \
-  --disk /dev/disk/by-id/usb-YOUR_DEVICE \
-  --usb-config config/usb.conf \
-  --repo-url https://github.com/YOUR-NAME/arch-t480-workstation
+uname -m
+ls /sys/firmware/efi/efivars >/dev/null
 ```
 
-Add `--with-offline-packages` from an Arch host when the USB must install the complete workstation without Internet access.
+For Ethernet, NetworkManager usually connects automatically. For Wi-Fi:
 
-The creation command erases the selected USB only after displaying its details and receiving the exact phrase `ERASE /dev/...`.
-
-## 3. Firmware state for installation
-
-On a T480, press **F1** during startup. Firmware wording varies, but the intended state is:
-
-| Setting | Installation value |
-|---|---|
-| UEFI/Legacy Boot | UEFI only |
-| CSM/Legacy support | Disabled |
-| Security Chip / TPM | Enabled and active |
-| Secure Boot | Disabled while using the installer USB |
-| Secure Boot key state | Setup Mode will be required later for owner-key enrollment |
-
-Do not restore factory Secure Boot keys after the repository enrolls owner keys. The default retains Microsoft UEFI certificates alongside the owner key for option-ROM and firmware compatibility.
-
-## 4. Boot the current USB slot
-
-Choose:
-
-```text
-Mason Arch installer - current cached slot
+```bash
+nmcli device wifi list
+nmcli device wifi connect "SSID" --ask
 ```
 
-The recovery entry boots the other complete Arch slot. The maintenance entry boots the live system without running the installer menu.
+Check connectivity and time:
 
-At startup the loader:
+```bash
+ping -c 3 archlinux.org
+timedatectl status
+```
 
-1. checks the network and optionally opens `iwctl`;
-2. resolves the configured GitHub ref and downloads its immutable commit archive when permitted;
-3. validates it and rotates the previous local repository generation;
-4. uses the selected repository profile immediately;
-5. checks for a fresher official Arch image;
-6. downloads, PGP/SHA-256 verifies and extracts it to the non-running slot;
-7. offers a reboot so installation can continue from that fresh slot.
+## 3. Obtain the repository
 
-A failed update does not delete the currently running Arch environment or the previous repository snapshot.
+```bash
+pacman -Sy --needed git
 
-## 5. Review the machine profile
+git clone <repository-url> arch-t480-workstation
+cd arch-t480-workstation
+```
 
-The default profile is `profiles/t480.conf`. It expects:
+A release archive is also valid. Verify its checksum before extracting it.
+
+## 4. Identify the whole target disk
+
+```bash
+lsblk -d -o NAME,SIZE,MODEL,SERIAL,TRAN
+lsblk -o NAME,SIZE,FSTYPE,TYPE,MOUNTPOINTS
+```
+
+The default is `/dev/nvme0n1`. Never infer the correct device only from its position in the output.
+
+## 5. Review configuration
+
+```bash
+cp config/install.conf.example config/install.conf
+vim config/install.conf
+```
+
+The default T480 policy includes:
 
 ```bash
 DISK="/dev/nvme0n1"
@@ -81,153 +77,167 @@ USERNAME="mason"
 CPU_VENDOR="intel"
 GPU_VENDOR="intel"
 ENABLE_T480=true
+ENABLE_MULTILIB=true
+AUR_HELPER_PACKAGE="paru-bin"
+AUR_NONINTERACTIVE=true
+PROVISION_NONINTERACTIVE=true
+ENABLE_SECURE_BOOT=true
+REQUIRE_SETUP_MODE_AT_INSTALL=true
+AUTO_PREPARE_SECURE_BOOT=true
+ENABLE_TPM=true
+TPM_PCRS="7"
+TPM_WITH_PIN=true
 ```
 
-Before installation, use the maintenance shell or menu shell to check:
+`AUR_NONINTERACTIVE=true` suppresses Paru review/rebuild prompts for only the explicit `AUR_PACKAGES` allow-list. Set it to `false` when manual inspection is preferred.
+
+## 6. Supply secrets
+
+The normal flow prompts twice for both the LUKS passphrase and user password before disk changes. The values remain shell variables and are not written to the repository.
+
+For unattended lab use, root-readable files can be configured:
 
 ```bash
-lsblk -d -o NAME,SIZE,MODEL,SERIAL,TRAN
-lsblk -o NAME,SIZE,FSTYPE,TYPE,MOUNTPOINTS
+LUKS_PASSPHRASE_FILE="/root/luks.secret"
+USER_PASSWORD_FILE="/root/user.secret"
 ```
 
-A T480 variant with discrete or hybrid NVIDIA graphics is outside this profile. Do not treat `GPU_VENDOR="intel"` as correct without checking the hardware.
+Each file must be mode `0400` or `0600`; only the first line is read. Do not store them on the installed disk or commit them.
 
-The profile is sourced by Bash and is executable policy. Review Git changes before allowing a remote branch to run as root.
+## 7. Run the non-destructive preflight
 
-## 6. Choose the package source
+```bash
+./start.sh preflight
+```
 
-### Online first, USB fallback
+The preflight verifies:
 
-This is the normal option. It uses current Arch repositories when reachable. If connectivity is absent, the installer validates and uses the complete local official and AUR caches.
+- x86-64 and UEFI boot;
+- official Arch ISO unless explicitly overridden;
+- whole-disk target with no mounts or active swap;
+- Secure Boot disabled and Setup Mode enabled;
+- TPM visibility when required;
+- network and time service;
+- live-ISO `multilib` activation and database synchronisation;
+- resolution of every configured official package;
+- exact AUR metadata matches for `paru-bin`, Edge, VS Code, and PowerShell.
 
-### Force fully offline
+Resolve every error before installation. No disk-erasure confirmation is requested in preflight mode.
 
-This option makes no package-mirror attempt. Before any disk modification, it verifies manifests, loads the local repository databases and checks that every configured package resolves.
+## 8. Install
 
-A basic USB without package caches can still boot and load its local configuration, but it cannot perform a full offline installation.
+```bash
+./start.sh --reboot-firmware
+```
 
-## 7. Run the destructive installation
-
-The installer runs preflight before the erase prompt. It checks:
-
-- x86-64 and UEFI mode;
-- Archiso context;
-- target whole-disk type and mounted descendants;
-- active target swap;
-- CPU/DMI profile mismatches;
-- TPM visibility;
-- Secure Boot state;
-- online source availability or complete offline-cache resolution.
-
-It displays the selected disk and requires the exact target-specific phrase, for example:
+`--reboot-firmware` requests firmware setup immediately after a successful install; omit it when you prefer to reboot manually. `start.sh` calls the root installer with `config/install.conf`. The installer asks for the two credentials and then requires the exact phrase:
 
 ```text
 ERASE /dev/nvme0n1
 ```
 
-The LUKS passphrase and user password are collected before the disk is changed.
+It then:
 
-The target receives:
+1. creates GPT, EFI, and encrypted-root partitions;
+2. formats and opens LUKS2;
+3. creates Btrfs subvolumes and mounts them;
+4. installs the base/Xfce system;
+5. writes the single installed policy file at `/etc/arch-installer/install.conf`;
+6. configures systemd-boot and both UKIs;
+7. creates/enrols `sbctl` owner keys while firmware is in Setup Mode;
+8. retains Microsoft certificates when configured;
+9. signs and records every `.efi` under `/efi/EFI`;
+10. verifies the full signed set before declaring success.
 
-- a 1 GiB FAT32 EFI System Partition at `/efi`;
-- LUKS2 containing Btrfs;
-- separate root, home, log, package-cache and snapshot subvolumes;
-- `linux` and `linux-lts` UKIs;
-- systemd-boot;
-- the complete configured official package set;
-- configured AUR application packages as part of an offline install;
-- a root-owned source snapshot at `/opt/arch-workstation`.
+The installed automation is `/opt/arch-workstation`; `/usr/local/bin/archctl` points to it.
 
-When the command completes, reboot and remove or deprioritise the installer USB.
+## 9. Enable Secure Boot
 
-## 8. First boot and provisioning
+When installation succeeds, reboot to firmware setup. Enable Secure Boot without clearing keys and without restoring factory keys. Remove the installation USB and boot the installed system.
 
-Unlock LUKS with the passphrase and log in as the configured user. Then run:
+The first unlock uses the long LUKS passphrase because TPM enrolment is deliberately deferred until the machine has actually booted the signed chain with Secure Boot active.
 
-```bash
-archctl provision
-```
+## 10. Finish first boot
 
-The command applies Ansible roles, services, dotfiles, VS Code settings and the PowerShell profile. When Internet is available it first performs a full Arch update and installs/reviews any AUR applications not already supplied by an offline installation. Without Internet, it uses the already installed complete package set and skips network-only extension/module downloads.
-
-Log out and back in after provisioning when Docker group membership is enabled.
-
-The installed policy file is:
-
-```text
-/etc/arch-installer/install.conf
-```
-
-It is owned by `root:wheel`, mode `0640`. `/opt/arch-workstation/config/install.conf` points to it. One-shot secret paths, erase confirmation, unattended mode, USB cache paths and Secure Boot confirmation are cleared in the installed copy.
-
-## 9. Secure Boot
-
-Firmware must be in **Setup Mode**, with Secure Boot enforcement still disabled. Boot Arch and run:
+Log in as the configured user and run:
 
 ```bash
-sudo archctl secure-boot
+archctl finish
 ```
 
-The command creates owner keys, requires the exact enrollment phrase, enrolls them with `sbctl`, includes Microsoft certificates by default, updates systemd-boot, rebuilds both UKIs and signs/records EFI assets.
+Run it as the normal user. If it is accidentally prefixed with `sudo`, `archctl` drops back to the invoking user before continuing. It asks for the normal Linux user password once, keeps the sudo timestamp alive, and performs root/user work in the correct contexts.
 
-Reboot into firmware and enable Secure Boot **without restoring factory keys**. Then verify:
+The state machine can safely be rerun. Depending on detected state it will:
+
+- apply the full Arch upgrade;
+- run all Ansible roles as root through the established sudo session;
+- bootstrap `paru-bin` without Rust/Cargo provider selection;
+- install the explicit AUR allow-list without routine review prompts;
+- configure VS Code and PowerShell as the normal user;
+- rebuild/sign/verify all boot assets after package transactions;
+- ask for the retained LUKS passphrase and a new TPM PIN;
+- enrol the TPM2 token and rebuild the signed UKIs;
+- run `archctl verify` and mark setup complete.
+
+Choose a daily TPM PIN with enough digits to resist casual guessing. The normal LUKS passphrase remains installed and should be kept offline as the main recovery path.
+
+## 11. Verify and test a reboot
 
 ```bash
+archctl status
+archctl verify
 sudo sbctl status
 sudo sbctl verify
-bootctl status
+systemctl --failed
 ```
 
-Do not enroll TPM unlocking until the signed system boots with Secure Boot active.
-
-## 10. Recovery key and TPM2
-
-Create an additional high-entropy LUKS recovery credential:
+Reboot and confirm the TPM PIN unlocks the disk:
 
 ```bash
-sudo archctl recovery-key
+sudo reboot
 ```
 
-Store it offline and separately. The original passphrase remains valid.
-
-Then enroll TPM2 unlocking:
+After login, Docker group membership should also be active:
 
 ```bash
-sudo archctl tpm-enroll
+docker run --rm hello-world
 ```
 
-The default binds to PCR 7 and requires a TPM PIN. Existing systemd TPM tokens are replaced while ordinary passphrase slots remain.
+## 12. Optional separate recovery key
 
-Reboot and test both TPM/PIN and passphrase paths, then run:
+The retained passphrase is already a fallback. An additional machine-generated recovery key can be added with:
 
 ```bash
-sudo archctl verify
+archctl recovery-key
 ```
 
-## 11. Manual official-ISO fallback
+It is printed once. Store it offline and test it before depending on it.
 
-When the custom USB cannot be used, boot the official Arch ISO in UEFI mode with Secure Boot disabled, connect the network and obtain the repository:
+## 13. Routine updates
 
 ```bash
-pacman -Sy --needed git
-git clone https://github.com/YOUR-NAME/arch-t480-workstation
-cd arch-t480-workstation
-cp profiles/t480.conf config/install.conf
-sudo ./install.sh --config config/install.conf --preflight-only
-sudo ./install.sh --config config/install.conf
+archctl update
 ```
 
-This path uses current online repositories unless a valid offline repository path is deliberately configured.
+This opens one sudo session, upgrades official packages, updates configured AUR packages, rebuilds UKIs, ensures the fallback and systemd-boot loaders exist, signs/registers all EFI executables, and verifies the resulting chain.
 
-## 12. Non-interactive target installation
+Always read current Arch Linux news before a major upgrade.
 
-The target installer supports strict non-interactive mode, but the USB creator, Secure Boot enrollment and AUR review retain explicit safety gates. Non-interactive target installation requires:
+## 14. Unattended disk installation
+
+For controlled lab automation only:
 
 ```bash
 NONINTERACTIVE=true
-LUKS_PASSPHRASE_FILE="/root/arch-secrets/luks-passphrase"
-USER_PASSWORD_FILE="/root/arch-secrets/user-password"
 WIPE_CONFIRMATION="ERASE /dev/nvme0n1"
+LUKS_PASSPHRASE_FILE="/root/luks.secret"
+USER_PASSWORD_FILE="/root/user.secret"
 ```
 
-Secret files must be root-readable with mode `0400` or `0600`; only their first line is used. Do not commit them or place them on the FAT USB partition.
+Then run:
+
+```bash
+./start.sh
+```
+
+Firmware actions and TPM PIN creation cannot safely be made fully unattended by this repository.

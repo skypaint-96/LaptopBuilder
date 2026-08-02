@@ -5,6 +5,8 @@ INSTALL_ROOT="${INSTALL_ROOT:-/mnt}"
 CRYPT_NAME="${CRYPT_NAME:-cryptroot}"
 TARGET_MOUNTED_BY_INSTALLER="${TARGET_MOUNTED_BY_INSTALLER:-false}"
 CRYPT_OPENED_BY_INSTALLER="${CRYPT_OPENED_BY_INSTALLER:-false}"
+STATE_DIR="${STATE_DIR:-/var/lib/arch-workstation}"
+SUDO_KEEPALIVE_PID="${SUDO_KEEPALIVE_PID:-}"
 
 _log() {
   local level=$1
@@ -24,6 +26,22 @@ bool_true() {
   esac
 }
 
+confirm() {
+  local prompt=${1:-Continue?}
+  local default=${2:-no}
+  local reply suffix
+
+  if [[ $default == yes ]]; then
+    suffix='[Y/n]'
+  else
+    suffix='[y/N]'
+  fi
+
+  read -r -p "$prompt $suffix " reply
+  reply=${reply:-$default}
+  bool_true "$reply"
+}
+
 require_root() {
   [[ ${EUID:-$(id -u)} -eq 0 ]] || die "This command must run as root."
 }
@@ -38,6 +56,30 @@ require_commands() {
     command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
   done
   ((${#missing[@]} == 0)) || die "Missing required commands: ${missing[*]}"
+}
+
+start_sudo_keepalive() {
+  if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+    return 0
+  fi
+
+  require_commands sudo
+  sudo -v
+  (
+    while kill -0 "$$" 2>/dev/null; do
+      sudo -n -v >/dev/null 2>&1 || exit 0
+      sleep 45
+    done
+  ) &
+  SUDO_KEEPALIVE_PID=$!
+}
+
+stop_sudo_keepalive() {
+  if [[ -n ${SUDO_KEEPALIVE_PID:-} ]]; then
+    kill "$SUDO_KEEPALIVE_PID" >/dev/null 2>&1 || true
+    wait "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+    SUDO_KEEPALIVE_PID=""
+  fi
 }
 
 partition_path() {

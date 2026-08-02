@@ -1,114 +1,116 @@
 # Security model
 
-## What the design protects
+The repository combines encryption at rest, an owner-controlled verified boot chain, and TPM-assisted daily unlocking. Each layer has a separate purpose and recovery boundary.
 
-The installed workstation combines:
+## LUKS2 encryption at rest
 
-- LUKS2 encryption with a retained human passphrase and optional recovery key;
-- signed Unified Kernel Images and systemd-boot under owner-controlled Secure Boot keys;
-- TPM2 enrollment bound to PCR 7, with a PIN by default;
-- root-owned installed configuration and source snapshot;
-- explicit destructive and firmware-enrollment confirmations;
-- A/B live installer recovery and previous repository fallback.
+The root Btrfs filesystem is inside LUKS2. Without a valid LUKS credential, removing the SSD or booting another operating system does not expose the filesystem contents.
 
-It reduces accidental loss and makes unattended modification of the installed boot chain harder. It does not replace personal-data backups or protect a running, unlocked administrator session.
+The normal long passphrase is retained after TPM enrolment. Do not replace the only recovery credential with a very short numeric passphrase. The intended arrangement is:
 
-## GitHub configuration is root code
+1. TPM2 plus a daily PIN for routine boots;
+2. the long LUKS passphrase for recovery;
+3. optionally, a separately stored generated recovery key.
 
-The USB executes installer code from the configured repository as root. A moving branch therefore delegates installation authority to:
+TPM enrolment adds a token; it does not delete ordinary passphrase slots. `tpm-remove` proves a non-TPM credential works before removing TPM tokens.
 
-- the GitHub account and repository permissions;
-- branch protection and review practices;
-- every dependency or action used to modify that repository.
+## Secure Boot owner keys
 
-The loader verifies structure and Bash syntax, not intent. A malicious but syntactically valid commit remains malicious.
+Fresh installation requires firmware Setup Mode before any disk changes. This moves the key-clear operation to the start of the process and lets the installer automatically:
 
-Use a repository you control, enable strong account authentication and review diffs. The loader resolves a moving ref to a full commit first and downloads that immutable commit archive, avoiding a branch-changing-between-downloads race. For release-grade installs, set `REPO_PINNED_COMMIT` to a full reviewed hash. The pin prevents a branch update from being accepted until you deliberately change it.
+- create owner PK, KEK, and db keys with `sbctl`;
+- enrol them through UEFI variables;
+- optionally include Microsoft certificates;
+- install the systemd-boot normal and fallback loaders;
+- build both configured UKIs;
+- sign and record every `.efi` below `/efi/EFI`;
+- fail installation if any discovered EFI executable does not verify.
 
-Only public HTTPS GitHub URLs are supported. Do not put tokens in `config/usb.conf`; the USB partition is not encrypted.
+The owner private keys remain under `/var/lib/sbctl/keys` on the encrypted root filesystem. Back them up to encrypted offline storage after the final system is working:
 
-## USB trust boundary
+```bash
+sudo tar -C /var/lib/sbctl -czf /path/to/encrypted-backup/sbctl-keys.tar.gz keys
+```
 
-The USB is writable FAT32 so firmware can boot it and the live system can refresh it. Anyone with physical write access can replace files and recompute adjacent SHA-256 manifests.
+Treat that archive as highly sensitive. Possession of the signing key permits signing code trusted by this firmware.
 
-The manifests and A/B generations protect primarily against:
+Do not restore factory keys after owner-key enrolment. The default `--microsoft` enrolment already includes Microsoft certificates alongside the owner keys for compatibility.
 
-- failed downloads;
-- interrupted writes;
-- accidental corruption;
-- a structurally incomplete update.
+## Full EFI coverage
 
-They are not a separate cryptographic root of trust. Keep the USB physically controlled. Rebuild it from a trusted repository/host after loss of custody.
+The original physical install exposed a gap where the fallback loader, systemd-boot, and both UKIs existed but were not all recorded in the `sbctl` database. Version 0.2 no longer assumes a fixed set of four paths. It discovers every `.efi` under `/efi/EFI`, runs `sbctl sign --save` for each, runs `sbctl sign-all`, and then requires `sbctl verify` to succeed.
 
-When the live system cannot remount the USB read-write, the loader enters a read-only fallback: no cache is replaced, but the existing verified slots, repository generations and package caches remain usable. Read-only operation prevents that session from refreshing content; it does not make previously stored content inherently trustworthy.
+This enforcement is used during installation, provisioning, explicit repair, TPM enrolment, and normal updates.
 
-The installer USB itself is booted with Secure Boot disabled. The target's Secure Boot design begins after installation; do not confuse the unsigned/mutable installer trust boundary with the signed installed boot chain.
+## TPM2 policy and PIN
 
-## Official Arch image verification
+TPM enrolment is only allowed after:
 
-A live refresh requires both:
+- Secure Boot is active in the running system;
+- local owner signing keys exist;
+- every EFI executable verifies;
+- a TPM2 device is visible;
+- the root volume is confirmed as LUKS2.
 
-- the current published SHA-256 value; and
-- the detached official Arch ISO PGP signature checked by `pacman-key`.
+The default binds the token to PCR 7, which represents the Secure Boot policy, and requests a PIN. The PIN is not the LUKS passphrase; it authorises release of a high-entropy secret sealed to the TPM state. Repeated incorrect PIN attempts can trigger TPM dictionary-attack lockout.
 
-Creation on a non-Arch host may lack `pacman-key`; in that case the creator checks the HTTPS SHA-256 list and warns. Booting the resulting official Arch environment and refreshing once performs the full PGP check before replacing a slot.
+Firmware resets, Secure Boot key changes, TPM clearing, motherboard replacement, or policy changes may invalidate TPM unlocking. Use the retained LUKS passphrase in that case and re-enrol deliberately.
 
-New images are written only to the non-running slot. The slot is checked for the expected kernel, initramfs, squashfs and CMS signature files before it is selected for the next boot.
+## Secrets and automation boundaries
 
-## Offline package trust
+The repository never commits passwords, LUKS passphrases, TPM PINs, recovery keys, or Secure Boot private keys.
 
-Official package downloads use normal Arch signature policy at cache-build time. AUR package files are locally built from reviewed community recipes and are normally unsigned.
+The installer collects the LUKS and user passwords before touching the disk. Optional secret files must be root-readable with mode `0400` or `0600`, and their paths are cleared from the installed configuration.
 
-The generated offline pacman configuration trusts the local repositories because the AUR packages have no separate package-signing key. The same-filesystem manifests detect damage but not malicious replacement by someone who can also rewrite the manifest. Treat the complete USB as trusted installation media.
+`archctl finish` deliberately leaves these interactions manual:
 
-Review every AUR PKGBUILD, `.SRCINFO`, source URL and update diff. `AUR_NONINTERACTIVE=true` deliberately removes this human gate and is not the recommended workstation default.
+- the initial sudo authentication;
+- the LUKS credential used to authorise TPM enrolment;
+- TPM PIN creation;
+- optional recovery-key capture;
+- physical firmware Setup Mode and Secure Boot enforcement changes.
 
-## Configuration and secrets
+Suppressing these would either require storing secrets or cross a firmware trust boundary without an explicit operator action.
 
-`profiles/t480.conf`, `config/install.conf` and `config/usb.conf` are sourced by Bash. They must contain policy, not literal secrets.
+## AUR policy
 
-Passwords are prompted into shell variables before target erasure and cleared after use. Optional secret files must be root-readable with mode `0400` or `0600`, are not copied to the target and must not be stored on the USB's FAT partition.
+AUR packages execute community-maintained PKGBUILDs. Version 0.2 uses the prebuilt `paru-bin` AUR package to avoid compiling Paru and selecting a Rust provider.
 
-Never commit:
+The default `AUR_NONINTERACTIVE=true` suppresses routine PKGBUILD/rebuild prompts and acts only on this explicit allow-list:
 
-- LUKS passphrases or recovery keys;
-- GitHub tokens;
-- SSH private keys;
-- Secure Boot private keys;
-- TPM recovery material;
-- client or employer confidential data.
+```text
+microsoft-edge-stable-bin
+visual-studio-code-bin
+powershell-bin
+```
 
-The installed configuration is `/etc/arch-installer/install.conf`, owner `root:wheel`, mode `0640`. One-shot secret paths, erase confirmation, non-interactive flags, live USB cache paths and firmware enrollment confirmation are cleared during installation.
+This is a conscious convenience/security trade-off. Set `AUR_NONINTERACTIVE=false` to print and confirm the helper PKGBUILD and retain Paru review prompts.
 
-## Secure Boot keys
+## Sudo and Ansible
 
-`archctl secure-boot` requires firmware Setup Mode and an exact phrase before enrolling keys. Microsoft UEFI certificates are retained by default for compatibility.
+The normal user authenticates once with `sudo -v`. A short-lived keepalive covers the provisioning run. Ansible is then invoked through `sudo env ... ansible-playbook` and the play itself uses `become: false`; this avoids an independent Ansible become-password prompt or non-interactive failure.
 
-Back up `/var/lib/sbctl/keys` encrypted and offline. Possession of these private keys permits signing code trusted by the machine. Do not store the backup on the installer USB beside the system it protects.
+The sudo policy remains password-protected wheel access. No persistent NOPASSWD rule is created.
 
-The update path refuses kernel/boot work when `/efi`, the expected key pair or `/etc/kernel/uki.conf` is missing while Secure Boot is active or expected.
+## Docker group
 
-## TPM2 limitations
+Membership in the `docker` group is effectively root-equivalent because the daemon can mount host paths and run privileged containers. Set `DOCKER_ADD_USER_TO_GROUP=false` to require `sudo docker` instead.
 
-TPM unlock improves resistance to simple offline theft but is not a substitute for the LUKS passphrase. PCR 7 binds to Secure Boot policy; firmware or key changes can intentionally break automatic unlocking.
+## SSH, TRIM, and snapshots
 
-The default PIN adds user presence and limits a stolen powered-off laptop from relying solely on measured state. Keep the ordinary passphrase and printed recovery key. Test passphrase fallback after every TPM re-enrollment.
+- The OpenSSH client is installed; the server stays disabled unless `ENABLE_SSH=true`.
+- Discard/TRIM through dm-crypt can reveal which encrypted blocks are unused. Set `ENABLE_SSD_TRIM=false` when that leakage matters more than SSD maintenance.
+- Btrfs/Snapper snapshots share the same disk and encryption boundary. They are rollback points, not backups.
 
-Do not clear the TPM or delete LUKS slots as a first troubleshooting step.
+## Operational checks
 
-## Docker and local privilege
+After installation and after security-sensitive updates:
 
-Membership of the `docker` group is effectively root-equivalent because members can mount host filesystems or launch privileged containers. `DOCKER_ADD_USER_TO_GROUP=true` chooses convenience over strict privilege separation. Set it false to require `sudo docker` or adopt a reviewed rootless design.
+```bash
+archctl verify
+sudo sbctl status
+sudo sbctl verify
+systemctl --failed
+```
 
-## SSD discard
-
-`ENABLE_SSD_TRIM=true` allows discard through dm-crypt and enables periodic trim. It can reveal which encrypted blocks are unused. Set it false when hiding allocation patterns matters more than SSD maintenance.
-
-## Recommended operating practices
-
-- Keep both `linux` and `linux-lts` bootable.
-- Run `archctl update`, not partial package upgrades.
-- Run `sudo archctl verify` after security or boot changes.
-- Test both TPM/PIN and passphrase unlock.
-- Back up personal data, the Git repository, LUKS recovery key and Secure Boot keys through separate channels.
-- Keep at least one known-good installer/recovery USB or the means to rebuild it.
+Use `archctl update` rather than running a package upgrade and forgetting to revalidate the signed boot set.
