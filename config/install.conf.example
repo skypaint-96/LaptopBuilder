@@ -1,0 +1,83 @@
+# Copy this file to config/install.conf and review every setting.
+# This file is sourced by Bash; use normal shell assignment syntax.
+# Do not commit passwords or private keys.
+
+# DESTRUCTIVE target. Confirm with: lsblk -o NAME,SIZE,MODEL,SERIAL,TYPE,MOUNTPOINTS
+DISK="/dev/nvme0n1"
+ESP_SIZE_MIB=1024
+
+HOSTNAME="arch-t480"
+USERNAME="mason"
+TIMEZONE="Europe/London"
+LOCALE="en_GB.UTF-8"
+KEYMAP="uk"
+
+# Explicit hardware profiles keep the build reproducible. Supported GPU profiles: intel, amd, generic.
+CPU_VENDOR="intel"
+GPU_VENDOR="intel"
+
+# The normal kernel plus LTS provides a second bootable UKI.
+KERNELS="linux linux-lts"
+FILESYSTEM="btrfs"
+DESKTOP="xfce"
+
+ENABLE_MULTILIB=true
+# Periodic TRIM through dm-crypt improves SSD maintenance but exposes which blocks are unused.
+ENABLE_SSD_TRIM=true
+# Add official repository packages without changing installer code.
+EXTRA_OFFICIAL_PACKAGES=""
+ENABLE_AUR=true
+AUR_HELPER="paru"
+# Build the helper from its reviewed source package so it links against the current pacman/libalpm.
+AUR_HELPER_PACKAGE="paru"
+AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin"
+# Leave false to review AUR build files and prompts interactively.
+AUR_NONINTERACTIVE=false
+
+ENABLE_DOCKER=true
+# Membership of the docker group is convenient but effectively root-equivalent.
+DOCKER_ADD_USER_TO_GROUP=true
+ENABLE_GAMING=true
+ENABLE_SNAPSHOTS=true
+ENABLE_T480=true
+ENABLE_POWERSHELL_PROFILE=true
+INSTALL_POWERSHELL_MODULES=false
+INSTALL_VSCODE_EXTENSIONS=true
+ENABLE_BLUETOOTH=true
+# The OpenSSH client is installed, but the server is disabled unless requested.
+ENABLE_SSH=false
+
+ENABLE_SECURE_BOOT=true
+# Retaining Microsoft UEFI certificates is the compatibility-oriented default.
+SBCTL_ENROLL_MICROSOFT=true
+# Required only for unattended key enrollment. Normal interactive runs prompt.
+SECURE_BOOT_CONFIRMATION=""
+
+ENABLE_TPM=true
+REQUIRE_TPM=true
+# PCR 7 measures the Secure Boot policy and remains practical across kernel updates.
+TPM_PCRS="7"
+TPM_WITH_PIN=true
+
+# Optional battery thresholds. Disabled by default because they are personal policy.
+T480_BATTERY_THRESHOLDS=false
+T480_START_CHARGE=40
+T480_STOP_CHARGE=80
+
+# Secrets are prompted securely by default. As an alternative, point to root-readable
+# files whose permissions are 0400 or 0600. Only the first line is read.
+LUKS_PASSPHRASE_FILE=""
+USER_PASSWORD_FILE=""
+
+# Installation source. The USB launcher overrides these values in a temporary
+# runtime copy. auto uses current mirrors when reachable, then the USB cache.
+INSTALL_SOURCE_MODE="auto"
+OFFLINE_REPO_PATH=""
+OFFLINE_AUR_REPO_PATH=""
+NETWORK_CHECK_URL="https://archlinux.org/"
+
+# Safety controls. Keep NONINTERACTIVE=false for normal use.
+NONINTERACTIVE=false
+# In non-interactive mode this must exactly equal: ERASE /dev/your-disk
+WIPE_CONFIRMATION=""
+ALLOW_NON_ARCHISO=false

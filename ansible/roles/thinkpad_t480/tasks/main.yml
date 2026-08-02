@@ -1,0 +1,47 @@
+---
+- name: Show detected hardware
+  ansible.builtin.debug:
+    msg: "Applying the T480 profile to {{ ansible_facts.product_name }} / {{ ansible_facts.product_version }}"
+
+- name: Install ThinkPad power, thermal, storage, and firmware tools
+  ansible.builtin.command:
+    argv:
+      - pacman
+      - --sync
+      - --needed
+      - --noconfirm
+      - bolt
+      - ethtool
+      - fwupd
+      - smartmontools
+      - thermald
+      - tlp
+      - tlp-rdw
+  register: t480_packages
+  changed_when: "'there is nothing to do' not in (t480_packages.stdout + t480_packages.stderr) | lower"
+  when: not packages_preinstalled | bool
+
+- name: Install conservative T480 TLP settings
+  ansible.builtin.template:
+    src: 40-t480.conf.j2
+    dest: /etc/tlp.d/40-t480.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart TLP
+
+- name: Enable T480 maintenance services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - tlp.service
+    - thermald.service
+    - fwupd-refresh.timer
+
+- name: Enable SMART monitoring
+  ansible.builtin.systemd_service:
+    name: smartd.service
+    enabled: true
+    state: started

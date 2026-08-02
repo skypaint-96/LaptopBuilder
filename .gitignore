@@ -1,0 +1,24 @@
+# Local installation choices and secrets
+config/install.conf
+config/secrets.conf
+config/secrets.env
+*.secret
+*.key
+*.pem
+
+# Generated/test output
+.cache/
+build/
+dist/
+*.log
+*.zip
+*.tar.gz
+
+# Editors
+.vscode/
+.idea/
+*~
+config/usb.conf
+*.iso
+*.img
+.usb-build/

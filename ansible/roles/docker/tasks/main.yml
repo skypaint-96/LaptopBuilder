@@ -1,0 +1,27 @@
+---
+- name: Install Docker engine and CLI plugins
+  ansible.builtin.command:
+    argv:
+      - pacman
+      - --sync
+      - --needed
+      - --noconfirm
+      - docker
+      - docker-buildx
+      - docker-compose
+  register: docker_packages
+  changed_when: "'there is nothing to do' not in (docker_packages.stdout + docker_packages.stderr) | lower"
+  when: not packages_preinstalled | bool
+
+- name: Enable Docker
+  ansible.builtin.systemd_service:
+    name: docker.service
+    enabled: true
+    state: started
+
+- name: Add the workstation user to the root-equivalent Docker group
+  ansible.builtin.user:
+    name: "{{ arch_user }}"
+    groups: docker
+    append: true
+  when: docker_add_user_to_group | bool

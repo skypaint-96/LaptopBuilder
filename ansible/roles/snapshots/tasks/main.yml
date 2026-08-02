@@ -1,0 +1,54 @@
+---
+- name: Install Snapper and pacman integration
+  ansible.builtin.command:
+    argv:
+      - pacman
+      - --sync
+      - --needed
+      - --noconfirm
+      - snap-pac
+      - snapper
+  register: snapshot_packages
+  changed_when: "'there is nothing to do' not in (snapshot_packages.stdout + snapshot_packages.stderr) | lower"
+  when: not packages_preinstalled | bool
+
+- name: Ensure Snapper configuration directory exists
+  ansible.builtin.file:
+    path: /etc/snapper/configs
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install root snapshot policy
+  ansible.builtin.template:
+    src: root.j2
+    dest: /etc/snapper/configs/root
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Register the root Snapper configuration
+  ansible.builtin.copy:
+    content: 'SNAPPER_CONFIGS="root"\n'
+    dest: /etc/conf.d/snapper
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Secure the snapshot mount point
+  ansible.builtin.file:
+    path: /.snapshots
+    state: directory
+    owner: root
+    group: wheel
+    mode: '0750'
+
+- name: Enable periodic Snapper maintenance
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - snapper-timeline.timer
+    - snapper-cleanup.timer

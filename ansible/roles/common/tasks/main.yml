@@ -1,0 +1,73 @@
+---
+- name: Install baseline command-line tools
+  ansible.builtin.command:
+    argv:
+      - pacman
+      - --sync
+      - --needed
+      - --noconfirm
+      - bash-completion
+      - bat
+      - btop
+      - curl
+      - fd
+      - fastfetch
+      - fzf
+      - git
+      - jq
+      - less
+      - man-db
+      - man-pages
+      - pacman-contrib
+      - ripgrep
+      - rsync
+      - tar
+      - unzip
+      - vim
+      - wget
+      - zip
+  register: common_packages
+  changed_when: "'there is nothing to do' not in (common_packages.stdout + common_packages.stderr) | lower"
+  when: not packages_preinstalled | bool
+
+- name: Create user configuration directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0755'
+  loop:
+    - "/home/{{ arch_user }}/.config"
+    - "/home/{{ arch_user }}/src"
+
+- name: Install managed Vim configuration
+  ansible.builtin.copy:
+    src: "{{ workstation_repo_root }}/dotfiles/vimrc"
+    dest: "/home/{{ arch_user }}/.vimrc"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0644'
+
+- name: Install managed Git defaults
+  ansible.builtin.copy:
+    src: "{{ workstation_repo_root }}/dotfiles/gitconfig"
+    dest: "/home/{{ arch_user }}/.gitconfig"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0644'
+
+- name: Ensure the optional local Git configuration exists
+  ansible.builtin.copy:
+    content: ''
+    dest: "/home/{{ arch_user }}/.gitconfig.local"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0600'
+    force: false
+
+- name: Enable weekly package cache cleanup
+  ansible.builtin.systemd_service:
+    name: paccache.timer
+    enabled: true
+    state: started

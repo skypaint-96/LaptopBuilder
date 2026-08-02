@@ -1,0 +1,13 @@
+{
+  "editor.formatOnSave": false,
+  "editor.renderWhitespace": "selection",
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
+  "terminal.integrated.defaultProfile.linux": "PowerShell",
+  "terminal.integrated.profiles.linux": {
+    "PowerShell": {
+      "path": "pwsh"
+    }
+  }
+}

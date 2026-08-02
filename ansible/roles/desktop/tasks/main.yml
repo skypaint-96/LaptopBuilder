@@ -1,0 +1,23 @@
+---
+- name: Install lightweight desktop integration tools
+  ansible.builtin.command:
+    argv:
+      - pacman
+      - --sync
+      - --needed
+      - --noconfirm
+      - file-roller
+      - gnome-keyring
+      - mousepad
+      - polkit-gnome
+      - ristretto
+      - xdg-desktop-portal
+      - xdg-desktop-portal-gtk
+  register: desktop_packages
+  changed_when: "'there is nothing to do' not in (desktop_packages.stdout + desktop_packages.stderr) | lower"
+  when: not packages_preinstalled | bool
+
+- name: Ensure graphical login is enabled
+  ansible.builtin.systemd_service:
+    name: lightdm.service
+    enabled: true

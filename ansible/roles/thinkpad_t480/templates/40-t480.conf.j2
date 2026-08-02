@@ -1,0 +1,13 @@
+# Managed by arch-workstation. TLP defaults remain in force unless overridden here.
+CPU_ENERGY_PERF_POLICY_ON_AC=balance_performance
+CPU_ENERGY_PERF_POLICY_ON_BAT=balance_power
+CPU_ENERGY_PERF_POLICY_ON_SAV=power
+WIFI_PWR_ON_AC=off
+WIFI_PWR_ON_BAT=on
+WIFI_PWR_ON_SAV=on
+{% if t480_battery_thresholds | bool %}
+START_CHARGE_THRESH_BAT0={{ t480_start_charge }}
+STOP_CHARGE_THRESH_BAT0={{ t480_stop_charge }}
+START_CHARGE_THRESH_BAT1={{ t480_start_charge }}
+STOP_CHARGE_THRESH_BAT1={{ t480_stop_charge }}
+{% endif %}

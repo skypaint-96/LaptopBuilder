@@ -1,0 +1,27 @@
+---
+- name: Install development toolchain
+  ansible.builtin.command:
+    argv:
+      - pacman
+      - --sync
+      - --needed
+      - --noconfirm
+      - ansible-core
+      - base-devel
+      - cmake
+      - dotnet-sdk
+      - git
+      - ninja
+      - shellcheck
+      - vim
+  register: development_packages
+  changed_when: "'there is nothing to do' not in (development_packages.stdout + development_packages.stderr) | lower"
+  when: not packages_preinstalled | bool
+
+- name: Create the .NET NuGet directory
+  ansible.builtin.file:
+    path: "/home/{{ arch_user }}/.nuget/packages"
+    state: directory
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0755'

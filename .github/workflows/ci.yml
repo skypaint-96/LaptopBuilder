@@ -1,0 +1,47 @@
+name: Static checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+          python3 -m pip install --disable-pip-version-check -r tests/requirements.txt
+
+      - name: Require PowerShell parser
+        run: command -v pwsh
+
+      - name: Run repository tests
+        run: make test
+  arch-packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: archlinux:base-devel
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Arch validation tools
+        run: pacman -Syu --needed --noconfirm curl
+
+      - name: Validate current Arch package names
+        run: ./tests/check-arch-packages.sh
+
+      - name: Validate configured AUR package names
+        run: ./tests/check-aur-packages.sh
+

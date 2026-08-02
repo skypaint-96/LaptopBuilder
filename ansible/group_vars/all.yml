@@ -1,0 +1,15 @@
+---
+arch_user: mason
+workstation_repo_root: /opt/arch-workstation
+enable_docker: true
+docker_add_user_to_group: true
+enable_gaming: true
+gpu_vendor: intel
+enable_snapshots: true
+enable_t480: true
+t480_battery_thresholds: false
+t480_start_charge: 40
+t480_stop_charge: 80
+
+# The installer lays down the complete official package set before first boot.
+packages_preinstalled: false

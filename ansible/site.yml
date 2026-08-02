@@ -1,0 +1,39 @@
+---
+- name: Provision the Arch workstation
+  hosts: workstation
+  connection: local
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Require Arch Linux
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Archlinux'
+          - ansible_facts.architecture == 'x86_64'
+        fail_msg: This playbook currently supports x86-64 Arch Linux only.
+
+    - name: Read configured user account
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ arch_user }}"
+
+  roles:
+    - role: common
+      tags: [common]
+    - role: desktop
+      tags: [desktop]
+    - role: development
+      tags: [development]
+    - role: docker
+      when: enable_docker | bool
+      tags: [docker]
+    - role: gaming
+      when: enable_gaming | bool
+      tags: [gaming]
+    - role: snapshots
+      when: enable_snapshots | bool
+      tags: [snapshots]
+    - role: thinkpad_t480
+      when: enable_t480 | bool
+      tags: [t480]

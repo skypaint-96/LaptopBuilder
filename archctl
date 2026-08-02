@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_PATH="$(readlink -f -- "${BASH_SOURCE[0]}")"
+REPO_ROOT="$(cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)"
+CONFIG_FILE="${ARCH_WORKSTATION_CONFIG:-/etc/arch-installer/install.conf}"
+
+if [[ ! -r $CONFIG_FILE && -r $REPO_ROOT/config/install.conf ]]; then
+  CONFIG_FILE="$REPO_ROOT/config/install.conf"
+fi
+
+usage() {
+  cat <<'EOF'
+Usage: archctl [--config PATH] COMMAND [arguments]
+
+Commands:
+  provision             Apply Ansible roles and user-level configuration
+  secure-boot           Enroll owner keys and sign the EFI boot chain (root)
+  tpm-enroll            Enroll TPM2 unlock after Secure Boot is active (root)
+  tpm-remove            Remove TPM2 unlock and keep passphrase boot (root)
+  recovery-key          Add a high-entropy LUKS recovery key (root)
+  verify                Check storage, boot, security, services, and packages (root)
+  snapshot [TEXT]       Create a manual Snapper root snapshot (root)
+  update                Update official/AUR packages and signed boot assets
+  help                  Show this help
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --config)
+      [[ $# -ge 2 ]] || { echo "--config requires a path" >&2; exit 2; }
+      CONFIG_FILE="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+COMMAND=${1:-help}
+if (($#)); then shift; fi
+export ARCH_WORKSTATION_CONFIG="$CONFIG_FILE"
+export ARCH_WORKSTATION_ROOT="$REPO_ROOT"
+
+case "$COMMAND" in
+  provision)
+    exec "$REPO_ROOT/scripts/provision.sh" "$@"
+    ;;
+  secure-boot)
+    exec "$REPO_ROOT/scripts/security/secure-boot.sh" "$@"
+    ;;
+  tpm-enroll)
+    exec "$REPO_ROOT/scripts/security/tpm-enroll.sh" "$@"
+    ;;
+  tpm-remove)
+    exec "$REPO_ROOT/scripts/security/tpm-remove.sh" "$@"
+    ;;
+  recovery-key)
+    exec "$REPO_ROOT/scripts/security/recovery-key.sh" "$@"
+    ;;
+  verify)
+    exec "$REPO_ROOT/scripts/security/verify.sh" "$@"
+    ;;
+  snapshot)
+    [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "snapshot must run as root" >&2; exit 1; }
+    description=${*:-"Manual snapshot"}
+    exec snapper -c root create --description "$description" --cleanup-algorithm number --print-number
+    ;;
+  update)
+    exec "$REPO_ROOT/scripts/update.sh" "$@"
+    ;;
+  help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

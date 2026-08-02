@@ -1,0 +1,16 @@
+# Managed defaults. Add identity in ~/.gitconfig.local if desired.
+[init]
+    defaultBranch = main
+[core]
+    editor = vim
+    autocrlf = input
+[pull]
+    ff = only
+[fetch]
+    prune = true
+[rebase]
+    autoStash = true
+[rerere]
+    enabled = true
+[include]
+    path = ~/.gitconfig.local

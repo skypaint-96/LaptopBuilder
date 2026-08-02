@@ -1,0 +1,28 @@
+" Managed by arch-workstation.
+set nocompatible
+set encoding=utf-8
+set number
+set relativenumber
+set hidden
+set mouse=a
+set ignorecase
+set smartcase
+set incsearch
+set hlsearch
+set expandtab
+set shiftwidth=4
+set softtabstop=4
+set tabstop=4
+set autoindent
+set smartindent
+set splitbelow
+set splitright
+set wildmenu
+set undofile
+set undodir=~/.vim/undo//
+filetype plugin indent on
+syntax enable
+
+if !isdirectory(expand('~/.vim/undo'))
+  call mkdir(expand('~/.vim/undo'), 'p', 0700)
+endif
