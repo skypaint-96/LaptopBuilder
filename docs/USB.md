@@ -235,3 +235,8 @@ Option 6 displays:
 - recent kernel messages matching USB reset, medium, buffer, or I/O errors.
 
 A missing writable partition is handled as a cache/configuration failure rather than as a failed live-ISO boot. Genuine kernel `I/O error`, USB reset, or medium-error messages still indicate an unreliable write, device, cable, or port and should not be ignored.
+
+
+## Executable permissions and line endings
+
+The builder normalises LF line endings and executable permissions before it creates the embedded project and persistent Git cache. The live launcher repeats that repair before validating a live clone, cached bundle, or embedded fallback. This makes builds resilient when files were copied through ZIP, FAT/NTFS, or a Git client that did not preserve Unix executable modes. The top-level `build-usb.sh` also invokes `usb/build.sh` through Bash so the repair can start even when that child script arrived without an executable bit.

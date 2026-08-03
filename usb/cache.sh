@@ -115,23 +115,36 @@ validate_git_repository_source "$REPO_URL" "$REPO_REF"
 load_config "$CONFIG_FILE"
 validate_config runtime
 
-seed_mirror_from_local() {
-  local source=$1 destination=$2 snapshot
-  if git -c "safe.directory=$source" -C "$source" rev-parse --git-dir >/dev/null 2>&1 \
-    && git -c "safe.directory=$source" -C "$source" diff --quiet HEAD -- \
-    && git -c "safe.directory=$source" -C "$source" diff --cached --quiet HEAD -- \
-    && [[ -z $(git -c "safe.directory=$source" -C "$source" ls-files --others --exclude-standard) ]]; then
-    git -c "safe.directory=$source" clone --mirror -- "$source" "$destination"
-    return
-  fi
+checkout_cache_ref() {
+  local repo=$1 ref=$2
+  git -C "$repo" checkout --detach "$ref" >/dev/null 2>&1 \
+    || git -C "$repo" checkout "$ref" >/dev/null 2>&1 \
+    || git -C "$repo" checkout --detach "origin/$ref" >/dev/null 2>&1
+}
 
+seed_mirror_from_local() {
+  local source=$1 destination=$2 snapshot path
   snapshot=$(mktemp -d "$(dirname -- "$destination")/source-snapshot.XXXXXX")
   copy_tracked_repository "$source" "$snapshot"
-  git -C "$snapshot" init -q -b main
+  prepare_project_tree "$snapshot" "$REQUIRED_USB_API_VERSION" \
+    || die "Project snapshot from $source is incompatible with USB API $REQUIRED_USB_API_VERSION."
+
+  git -C "$snapshot" init -q -b cache-snapshot
   git -C "$snapshot" config user.name 'arch-workstation cache'
   git -C "$snapshot" config user.email 'cache@localhost.invalid'
   git -C "$snapshot" add -A
-  git -C "$snapshot" commit -qm 'Cache source snapshot'
+  for path in \
+    start.sh install.sh archctl build-usb.sh upgrade-existing.sh \
+    usb/cache.sh usb/configure.sh usb/secrets.sh usb/build.sh \
+    usb/live/archws-live usb/lib/common.sh; do
+    [[ -f $snapshot/$path ]] || continue
+    git -C "$snapshot" update-index --chmod=+x -- "$path"
+  done
+  while IFS= read -r -d '' path; do
+    path=${path#"$snapshot/"}
+    git -C "$snapshot" update-index --chmod=+x -- "$path"
+  done < <(find -P "$snapshot/usb" "$snapshot/scripts" -type f -name '*.sh' -print0 2>/dev/null)
+  git -C "$snapshot" commit -qm 'Normalised USB project cache snapshot'
   git -C "$snapshot" clone --mirror -- "$snapshot" "$destination"
   rm -rf "$snapshot"
 }
@@ -139,6 +152,7 @@ seed_mirror_from_local() {
 refresh_repository_cache() {
   require_commands git
   local destination="$CACHE_ROOT/repo" temp_parent temp_mirror commit cached_api
+  local source_checkout='' source_for_cache="$SOURCE_REPO" source_description='local source'
   mkdir -p "$destination"
   temp_parent=$(mktemp -d "$destination/.refresh.XXXXXX")
   temp_mirror="$temp_parent/mirror.git"
@@ -146,33 +160,25 @@ refresh_repository_cache() {
 
   info "Refreshing project repository cache for ref '$REPO_REF'."
   if [[ -n $REPO_URL ]]; then
-    if ! GIT_TERMINAL_PROMPT=0 git clone --mirror -- "$REPO_URL" "$temp_mirror"; then
-      warn "Live clone failed; falling back to the local source repository: $SOURCE_REPO"
-      rm -rf "$temp_mirror"
-      seed_mirror_from_local "$SOURCE_REPO" "$temp_mirror"
+    source_checkout="$temp_parent/live-source"
+    if GIT_TERMINAL_PROMPT=0 git clone -- "$REPO_URL" "$source_checkout" \
+      && checkout_cache_ref "$source_checkout" "$REPO_REF" \
+      && prepare_project_tree "$source_checkout" "$REQUIRED_USB_API_VERSION"; then
+      source_for_cache=$source_checkout
+      source_description='live source'
+    else
+      warn "The live source could not provide a compatible USB API $REQUIRED_USB_API_VERSION project; caching the local builder snapshot instead."
+      rm -rf "$source_checkout"
+      source_checkout=''
+      source_for_cache=$SOURCE_REPO
     fi
-  else
-    seed_mirror_from_local "$SOURCE_REPO" "$temp_mirror"
   fi
 
-  commit=$(git --git-dir="$temp_mirror" rev-parse "${REPO_REF}^{commit}" 2>/dev/null || true)
-  if [[ -z $commit ]]; then
-    commit=$(git --git-dir="$temp_mirror" rev-parse HEAD)
-    warn "Ref '$REPO_REF' was not present in the cache source; cached HEAD $commit instead."
-  fi
-
-  cached_api=$(git --git-dir="$temp_mirror" show "$commit:usb/API_VERSION" 2>/dev/null || true)
-  if [[ $cached_api != "$REQUIRED_USB_API_VERSION" ]]; then
-    if [[ -n $REPO_URL ]]; then
-      warn "The live ref does not provide USB API $REQUIRED_USB_API_VERSION; caching the local project snapshot instead."
-      rm -rf "$temp_mirror"
-      seed_mirror_from_local "$SOURCE_REPO" "$temp_mirror"
-      commit=$(git --git-dir="$temp_mirror" rev-parse HEAD)
-      cached_api=$(git --git-dir="$temp_mirror" show "$commit:usb/API_VERSION" 2>/dev/null || true)
-    fi
-    [[ $cached_api == "$REQUIRED_USB_API_VERSION" ]] \
-      || die "The project cache source is incompatible with USB API $REQUIRED_USB_API_VERSION."
-  fi
+  seed_mirror_from_local "$source_for_cache" "$temp_mirror"
+  commit=$(git --git-dir="$temp_mirror" rev-parse HEAD)
+  cached_api=$(git --git-dir="$temp_mirror" show "$commit:usb/API_VERSION" 2>/dev/null | tr -d '[:space:]' || true)
+  [[ $cached_api == "$REQUIRED_USB_API_VERSION" ]] \
+    || die "The normalised project cache is incompatible with USB API $REQUIRED_USB_API_VERSION."
 
   git --git-dir="$temp_mirror" fsck --no-progress
   git --git-dir="$temp_mirror" bundle create "$temp_parent/project.bundle" --all
@@ -183,6 +189,7 @@ ARCHWS_REPO_URL=$(usb_quote "$REPO_URL")
 ARCHWS_REPO_REF=$(usb_quote "$REPO_REF")
 ARCHWS_REPO_COMMIT=$(usb_quote "$commit")
 ARCHWS_USB_API_VERSION=$(usb_quote "$cached_api")
+ARCHWS_REPO_CACHE_SOURCE=$(usb_quote "$source_description")
 ARCHWS_REPO_REFRESHED_AT=$(usb_quote "$(date --iso-8601=seconds)")
 EOF_REPO
 
@@ -195,7 +202,7 @@ EOF_REPO
   mv -f "$destination/project.bundle.new" "$destination/project.bundle"
   install -m 0644 "$temp_parent/repository.env" "$destination/repository.env"
   rm -rf "$destination/mirror.git.previous"
-  success "Project cache now contains commit $commit"
+  success "Project cache now contains normalised $source_description snapshot $commit"
   rm -rf "$temp_parent"
   trap - EXIT
 }

@@ -114,37 +114,99 @@ prompt_boolean() {
   fi
 }
 
+repository_path_is_excluded() {
+  local path=${1#./}
+  case "$path" in
+    .git|.git/*|config/install.conf|config/usb-secrets.json|config/secrets.conf|config/secrets.env|\
+    usb/output|usb/output/*|usb/work|usb/work/*|build|build/*|dist|dist/*|\
+    *.secret|*.key|*.pem|*.gpg|*.iso|*.bundle|*.zip|*.tar.gz)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+normalise_project_tree() {
+  local root=$1 path
+  [[ -d $root ]] || return 1
+
+  # Git's executable bit can be lost when a release is unpacked on FAT/NTFS or
+  # committed from a platform with core.fileMode disabled.  The USB runtime
+  # must therefore repair modes rather than trust transport metadata.
+  for path in \
+    start.sh install.sh archctl build-usb.sh upgrade-existing.sh \
+    usb/cache.sh usb/configure.sh usb/secrets.sh usb/build.sh \
+    usb/live/archws-live usb/lib/common.sh; do
+    [[ -f $root/$path && ! -L $root/$path ]] || continue
+    chmod 0755 "$root/$path"
+  done
+
+  for path in usb scripts tests; do
+    [[ -d $root/$path ]] || continue
+    find -P "$root/$path" -type d -exec chmod 0755 {} +
+    find -P "$root/$path" -type f -name '*.sh' -exec chmod 0755 {} +
+  done
+
+  # CRLF shebangs produce a misleading "not found"/compatibility failure.
+  # Restrict line-ending repair to runtime text files.
+  while IFS= read -r -d '' path; do
+    sed -i 's/\r$//' "$path"
+  done < <(
+    find -P "$root" -type f \
+      \( -name '*.sh' -o -name 'archctl' -o -name 'start.sh' \
+         -o -name 'install.sh' -o -name 'build-usb.sh' \
+         -o -name 'upgrade-existing.sh' -o -path '*/usb/API_VERSION' \) \
+      -print0
+  )
+  [[ ! -e $root/usb/API_VERSION || -L $root/usb/API_VERSION ]] \
+    || chmod 0644 "$root/usb/API_VERSION"
+}
+
+project_tree_is_compatible() {
+  local root=$1 required_api=$2 actual_api path
+  [[ -f $root/usb/API_VERSION && ! -L $root/usb/API_VERSION ]] || return 1
+  actual_api=$(tr -d '[:space:]' < "$root/usb/API_VERSION")
+  [[ $actual_api == "$required_api" ]] || return 1
+
+  for path in \
+    start.sh install.sh archctl build-usb.sh \
+    usb/cache.sh usb/configure.sh usb/secrets.sh usb/lib/common.sh; do
+    [[ -f $root/$path && ! -L $root/$path && -x $root/$path ]] || return 1
+  done
+}
+
+prepare_project_tree() {
+  local root=$1 required_api=$2
+  normalise_project_tree "$root"
+  project_tree_is_compatible "$root" "$required_api"
+}
+
 copy_tracked_repository() {
-  local source=$1 destination=$2 git_top=""
+  local source=$1 destination=$2 git_top='' list_file path
   rm -rf "$destination"
   mkdir -p "$destination"
 
   if command -v git >/dev/null 2>&1; then
     git_top=$(git -c "safe.directory=$source" -C "$source" rev-parse --show-toplevel 2>/dev/null || true)
   fi
+
   if [[ -n $git_top && $(readlink -f "$git_top") == $(readlink -f "$source") ]]; then
+    list_file=$(mktemp)
+    while IFS= read -r -d '' path; do
+      [[ -e $source/$path || -L $source/$path ]] || continue
+      repository_path_is_excluded "$path" && continue
+      printf '%s\0' "$path" >> "$list_file"
+    done < <(
+      git -c "safe.directory=$source" -C "$source" \
+        ls-files -z --cached --others --exclude-standard
+    )
     (
       cd "$source"
-      git -c "safe.directory=$source" ls-files -z \
-        | tar --create --file=- --null \
-          --exclude='config/install.conf' \
-          --exclude='config/usb-secrets.json' \
-          --exclude='config/secrets.conf' \
-          --exclude='config/secrets.env' \
-          --exclude='*.secret' \
-          --exclude='*.key' \
-          --exclude='*.pem' \
-          --exclude='*.gpg' \
-          --exclude='*.iso' \
-          --exclude='*.bundle' \
-          --exclude='*.zip' \
-          --exclude='*.tar.gz' \
-          --exclude='usb/output' \
-          --exclude='usb/output/*' \
-          --exclude='usb/work' \
-          --exclude='usb/work/*' \
-          --files-from=-
+      tar --create --file=- --null --files-from="$list_file"
     ) | tar -C "$destination" -xf -
+    rm -f "$list_file"
   else
     tar -C "$source" \
       --exclude='.git' \
@@ -166,6 +228,8 @@ copy_tracked_repository() {
       --exclude='*.pem' \
       -cf - . | tar -C "$destination" -xf -
   fi
+
+  normalise_project_tree "$destination"
 }
 
 find_media_partition() {

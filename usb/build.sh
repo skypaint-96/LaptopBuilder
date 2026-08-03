@@ -29,6 +29,7 @@ MOUNT_DIR=""
 TEMP_ROOT=""
 DATA_PART=""
 VERSION=$(cat "$REPO_ROOT/VERSION" 2>/dev/null || printf development)
+REQUIRED_USB_API_VERSION=$(tr -d '[:space:]' < "$REPO_ROOT/usb/API_VERSION")
 
 # shellcheck source=../scripts/lib/common.sh
 source "$REPO_ROOT/scripts/lib/common.sh"
@@ -428,6 +429,8 @@ prepare_archiso_profile() {
     "$profile/airootfs/usr/local/bin" \
     "$profile/airootfs/root"
   copy_tracked_repository "$REPO_ROOT" "$profile/airootfs/opt/arch-workstation-embedded"
+  prepare_project_tree "$profile/airootfs/opt/arch-workstation-embedded" "$REQUIRED_USB_API_VERSION" \
+    || die "The embedded project snapshot failed USB API $REQUIRED_USB_API_VERSION validation."
   printf '%s\n' "$(build_commit)" > "$profile/airootfs/opt/arch-workstation-embedded/BUILD_COMMIT"
   install -m 0600 "$MEDIA_CONFIG" "$profile/airootfs/etc/arch-workstation-media/install.conf"
   write_media_environment \
@@ -626,6 +629,14 @@ verify_persistent_media() {
   sudo git --git-dir="$media_root/cache/repo/mirror.git" \
     bundle verify "$media_root/cache/repo/project.bundle" >/dev/null
 
+  local bundle_checkout
+  bundle_checkout=$(mktemp -d /tmp/archws-bundle-verify.XXXXXX)
+  git clone -q -- "$media_root/cache/repo/project.bundle" "$bundle_checkout/project" \
+    || die 'The persistent repository bundle verified structurally but could not be cloned.'
+  prepare_project_tree "$bundle_checkout/project" "$REQUIRED_USB_API_VERSION" \
+    || die "The persistent repository bundle does not contain a usable USB API $REQUIRED_USB_API_VERSION project."
+  rm -rf "$bundle_checkout"
+
   custom_iso_copy=$(find "$media_root/cache/archiso/custom" -maxdepth 1 -type f -name '*.iso' -print -quit 2>/dev/null || true)
   if [[ -n $custom_iso_copy ]]; then
     custom_sum="${custom_iso_copy}.sha256"
@@ -792,6 +803,9 @@ refresh_existing_usb() {
 }
 
 ensure_builder_packages
+info 'Normalising project line endings and executable permissions before creating USB snapshots.'
+prepare_project_tree "$REPO_ROOT" "$REQUIRED_USB_API_VERSION" \
+  || die "The builder checkout is incomplete or incompatible with USB API $REQUIRED_USB_API_VERSION."
 if bool_true "$REFRESH_ONLY"; then
   refresh_existing_usb
   trap - EXIT

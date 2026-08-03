@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.4
+
+### Fixed
+
+- Normalise LF line endings and executable permissions before building the ArchISO, embedded project, and persistent repository cache.
+- Include non-ignored untracked working-tree files in USB snapshots so a newly added USB API file cannot be silently omitted before its first commit.
+- Validate the embedded project before `mkarchiso` and clone/read-test the persistent Git bundle after writing the USB.
+- Repair file modes before evaluating live, cached, or embedded project compatibility at boot.
+- Distinguish a failed Git clone from a successful clone containing an incompatible project.
+- Store the persistent project cache as a normalised snapshot with executable Git index modes.
+- Add `.gitattributes` rules enforcing LF line endings for shell and runtime configuration files.
+- Bump the USB launcher API to version 2 so older media cannot silently mix with this corrected source-selection contract.
+
 ## 0.3.3
 
 ### Fixed
