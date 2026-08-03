@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3
+
+### Fixed
+
+- Fixed persistent-media verification incorrectly reporting the root-owned mode-0600 `install.conf` as unreadable when the check ran as the invoking user.
+
+
 ## 0.3.2
 
 - Replace `sgdisk` partition creation on ISOHybrid USB media with `sfdisk` append logic.

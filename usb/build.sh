@@ -620,7 +620,7 @@ verify_persistent_media() {
   sudo mount -o ro "$DATA_PART" "$verify_mount"
   media_root="$verify_mount/$USB_MEDIA_DIR_NAME"
 
-  [[ -r $media_root/config/install.conf ]] || die 'Persistent configuration was not readable after USB write.'
+  sudo test -r "$media_root/config/install.conf" || die 'Persistent configuration was not readable after USB write.'
   [[ -r $media_root/media.env ]] || die 'Persistent media metadata was not readable after USB write.'
   [[ -s $media_root/cache/repo/project.bundle ]] || die 'Persistent repository bundle was not readable after USB write.'
   sudo git --git-dir="$media_root/cache/repo/mirror.git" \
