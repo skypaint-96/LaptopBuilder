@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2
+
+- Replace `sgdisk` partition creation on ISOHybrid USB media with `sfdisk` append logic.
+- Relocate a GPT backup header explicitly when the written ArchISO uses GPT.
+- Support both GPT and DOS/MBR ISOHybrid layouts.
+- Detect the newly appended partition by device topology before formatting it.
+- Verify the `ARCHWS_DATA` filesystem label after creation.
+
+
 ## 0.3.0 - 2026-08-03
 
 - Restored USB building as a first-class repository workflow through `build-usb.sh` and ArchISO `releng`.

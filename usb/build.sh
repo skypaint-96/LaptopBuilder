@@ -223,7 +223,7 @@ ensure_builder_packages() {
   fi
   require_commands \
     awk base64 cmp cp curl dd e2fsck findmnt findfs git gpg jq lsblk mkfs.ext4 mount pacman \
-    partprobe readlink rsync sed sgdisk sha256sum stat swapon tar udevadm umount wipefs
+    partprobe readlink rsync sed sfdisk sgdisk sha256sum stat swapon tar udevadm umount wipefs
   if ! bool_true "$REFRESH_ONLY"; then
     require_commands mkarchiso
   fi
@@ -512,16 +512,50 @@ unmount_device_children() {
 }
 
 create_data_partition() {
+  local partition_table candidate
+  local -a existing_partitions=()
+
   info 'Creating the persistent ARCHWS_DATA partition in the unused space after the hybrid ISO.'
-  sudo sgdisk -e "$DEVICE"
-  sudo sgdisk -N 0 -t 0:8300 -c 0:"$USB_MEDIA_LABEL" "$DEVICE"
-  sudo partprobe "$DEVICE"
+  partition_table=$(lsblk -dnro PTTYPE "$DEVICE" 2>/dev/null || true)
+  [[ $partition_table == gpt || $partition_table == dos ]] \
+    || die "The written ArchISO has an unsupported partition-table type: ${partition_table:-unknown}."
+
+  mapfile -t existing_partitions < <(lsblk -nrpo NAME,TYPE "$DEVICE" | awk '$2 == "part" {print $1}')
+
+  # ArchISO images are ISOHybrid media. GPT-aware variants retain their backup
+  # header at the end of the image rather than the end of the larger USB. Use
+  # util-linux's explicit relocation operation before appending a partition.
+  # For DOS/MBR ISOHybrid layouts, append directly to the recognised MBR table.
+  if [[ $partition_table == gpt ]]; then
+    sudo sfdisk --lock --relocate gpt-bak-std "$DEVICE"
+    printf 'type=L, name="%s"\n' "$USB_MEDIA_LABEL" \
+      | sudo sfdisk --lock --append --wipe never --wipe-partitions never "$DEVICE"
+  else
+    printf 'type=L\n' \
+      | sudo sfdisk --lock --append --wipe never --wipe-partitions never "$DEVICE"
+  fi
+
+  sudo partprobe "$DEVICE" || true
   sudo udevadm settle
-  DATA_PART=$(find_media_partition "$DEVICE" || true)
-  [[ -n $DATA_PART && -b $DATA_PART ]] || die 'The new ARCHWS_DATA partition did not appear.'
+
+  DATA_PART=''
+  while IFS= read -r candidate; do
+    [[ -n $candidate ]] || continue
+    if ! printf '%s\n' "${existing_partitions[@]}" | grep -Fxq -- "$candidate"; then
+      DATA_PART=$candidate
+      break
+    fi
+  done < <(lsblk -nrpo NAME,TYPE "$DEVICE" | awk '$2 == "part" {print $1}')
+
+  [[ -n $DATA_PART && -b $DATA_PART ]] \
+    || die 'The new ARCHWS_DATA partition did not appear after appending it to the ISOHybrid partition table.'
   sudo umount "$DATA_PART" 2>/dev/null || true
   sudo mkfs.ext4 -F -L "$USB_MEDIA_LABEL" "$DATA_PART"
   sudo udevadm settle
+
+  # A filesystem label is portable across both GPT and DOS ISOHybrid layouts.
+  [[ $(lsblk -dnro LABEL "$DATA_PART" 2>/dev/null || true) == "$USB_MEDIA_LABEL" ]] \
+    || die 'The persistent partition was created but its ARCHWS_DATA filesystem label could not be verified.'
 }
 
 mount_data_partition() {

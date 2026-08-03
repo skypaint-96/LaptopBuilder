@@ -68,7 +68,8 @@ copy_tracked_repository "$TEMP/tracked-source" "$TEMP/tracked-copy"
 [[ ! -e $TEMP/tracked-copy/stale.gpg ]]
 
 grep -q 'mkarchiso' "$ROOT/usb/build.sh"
-grep -q 'sgdisk -N 0' "$ROOT/usb/build.sh"
+grep -q 'sfdisk --lock --append' "$ROOT/usb/build.sh"
+grep -q 'sfdisk --lock --relocate gpt-bak-std' "$ROOT/usb/build.sh"
 grep -q 'cmp -n' "$ROOT/usb/build.sh"
 grep -q 'ARCHWS_DATA' "$ROOT/usb/live/archws-live"
 grep -q 'udevadm settle --timeout=10' "$ROOT/usb/live/archws-live"
