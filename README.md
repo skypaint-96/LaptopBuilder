@@ -1,41 +1,34 @@
 # Arch T480 Workstation
 
-A reproducible vanilla Arch Linux workstation build for x86-64 UEFI hardware, with a Lenovo ThinkPad T480 profile enabled by default.
+A reproducible vanilla Arch Linux workstation and custom installation-USB project for x86-64 UEFI systems, with a Lenovo ThinkPad T480 profile enabled by default.
 
-The repository deliberately treats the operating system as rebuildable configuration. It installs a compact Xfce/X11 base, provisions the requested applications, creates an owner-controlled Secure Boot chain, and enrols TPM2-backed LUKS unlocking while retaining a normal recovery passphrase.
+The project treats the operating system as rebuildable configuration. It creates a bootable custom ArchISO, keeps a writable offline cache beside it, installs a compact Xfce/X11 system, provisions the requested applications, creates an owner-controlled Secure Boot chain, and enrols TPM2-backed LUKS unlocking while retaining a recovery passphrase.
 
-> **Destructive:** the installer owns and erases the entire configured disk. Back up the machine and run the non-destructive preflight first.
+> **Destructive:** both USB creation and workstation installation erase the selected whole disk. Verify model and serial number and use the non-destructive checks first.
 
-## What version 0.2 automates
+## Version 0.3 highlights
 
-Version 0.2 incorporates the failures and manual repairs found during the first physical T480 installation:
-
-- enables and synchronises `multilib` in the live ISO before package resolution or `pacstrap`;
-- resolves every configured official package and AUR package name before disk erasure;
-- requires Secure Boot Setup Mode before installation, then enrols keys and signs every EFI binary during installation;
-- installs prebuilt `paru-bin`, avoiding a Rust/Cargo provider choice and a lengthy Paru source build;
-- uses one sudo authentication for the complete provisioning run;
-- invokes Ansible through that authenticated root session rather than failing at `become`;
-- uses an explicit AUR allow-list with optional non-interactive review suppression;
-- provides a resumable `archctl finish` state machine;
-- detects and signs all `.efi` files below `/efi/EFI`, including the fallback loader, systemd-boot, and both UKIs;
-- re-signs and verifies the complete boot chain after provisioning and future updates;
-- provides `start.sh` compatibility and an `upgrade-existing.sh` migration tool.
-
-The firmware still has two unavoidable physical trust-boundary actions: clear keys to enter Setup Mode before installation, and enable Secure Boot after the installer enrols the replacement keys.
+- Restored a supported `build-usb.sh` workflow built on ArchISO's `releng` profile.
+- Replaced the fragile `bootmnt`/`mason-arch` dependency with an immutable custom ISO plus a writable `ARCHWS_DATA` partition.
+- Automatically launches `archws` on tty1 while retaining a normal root shell on failure.
+- Defaults to a live Git ref and current Arch package sources, with fallback order live → persistent cache → embedded repository.
+- Refreshes the Git mirror/bundle, current official Arch ISO backup, pacman databases, and configured official package cache before a live install.
+- Supports a cache-only refresh from the USB menu or `build-usb.sh --refresh-only` without installing or rewriting the boot image; saved configuration and encrypted credentials are preserved unless explicitly changed.
+- Adds guided configuration at build time and on the live USB.
+- Adds an optional GnuPG-encrypted credential bundle with all missing values collected together before the build.
+- Validates writable media metadata plus live Git URLs/refs instead of executing metadata as shell input.
+- Stages LUKS/TPM credentials only inside a separate encrypted Btrfs subvolume excluded from root snapshots, then removes them after successful TPM enrolment.
+- Retains the v0.2 fixes for multilib, Paru prompts, Ansible sudo, complete EFI signing, and resumable first boot.
 
 ## Baseline
 
 - Vanilla Arch Linux, x86-64, UEFI/GPT only.
-- Xfce on X11 for low idle resource use and mature application support.
-- `linux` and `linux-lts` Unified Kernel Images (UKIs).
-- LUKS2 encrypted root on Btrfs with zstd compression.
-- Separate Btrfs subvolumes for root, home, logs, package cache, and snapshots.
-- systemd-boot with a standard fallback loader.
-- Secure Boot owner keys managed by `sbctl`, retaining Microsoft certificates by default for compatibility.
-- TPM2 unlock using `systemd-cryptenroll`, PCR 7, and a daily PIN by default.
+- Xfce on X11.
+- `linux` and `linux-lts` Unified Kernel Images.
+- LUKS2 encrypted Btrfs root with zstd compression.
+- systemd-boot, `sbctl` owner keys, Secure Boot, and TPM2 PCR 7 with a PIN.
 - NetworkManager, PipeWire, LightDM, zram, Snapper, TLP, thermald, fwupd, and SMART monitoring.
-- Bash bootstrap, root-run Ansible provisioning, and user-run PowerShell/VS Code configuration.
+- Bash installation, Ansible provisioning, and PowerShell/VS Code user configuration.
 
 ## Requested applications
 
@@ -46,79 +39,73 @@ The firmware still has two unavoidable physical trust-boundary actions: clear ke
 | PowerShell | `powershell-bin` from AUR |
 | .NET | `dotnet-sdk` from official repositories |
 | Visual Studio Code | `visual-studio-code-bin` from AUR |
-| Docker | `docker`, `docker-buildx`, `docker-compose` |
+| Docker | `docker`, Buildx, and Compose |
 | Git | `git` |
-| Steam | `steam`, GameMode, MangoHud, and explicit Intel/AMD 32-bit Vulkan userspace |
+| Steam | `steam`, GameMode, MangoHud, and explicit 32-bit Vulkan userspace |
 
-The default AUR bootstrap is `paru-bin`. Automated AUR mode skips routine review prompts but only acts on the package names explicitly listed in `AUR_PACKAGES`. Set `AUR_NONINTERACTIVE=false` to restore manual PKGBUILD review.
+## Build the installation USB
 
-## Fresh installation
-
-### 1. Prepare firmware
-
-On the T480, press **F1** during startup and configure:
-
-1. UEFI-only booting; disable Legacy/CSM.
-2. TPM/Security Chip enabled.
-3. Secure Boot disabled.
-4. Clear/reset the Secure Boot keys so firmware reports **Setup Mode enabled**.
-5. Do not restore factory keys.
-
-Boot the official Arch ISO in UEFI mode and connect it to the network.
-
-### 2. Configure and preflight
+From an installed Arch system:
 
 ```bash
-pacman -Sy --needed git
-
-git clone <repository-url> arch-t480-workstation
-cd arch-t480-workstation
-cp config/install.conf.example config/install.conf
-vim config/install.conf
-
-./start.sh preflight
+git clone <repository-url> arch-workstation
+cd arch-workstation
+./build-usb.sh --device /dev/sdX --configure
 ```
 
-The preflight checks firmware state, TPM visibility, target-disk safety, network access, `multilib`, all official package names, and the AUR allow-list. It makes no disk changes.
-
-### 3. Install
+For an encrypted build-time credential bundle:
 
 ```bash
-./start.sh --reboot-firmware
+cp config/usb-secrets.json.example config/usb-secrets.json
+chmod 0600 config/usb-secrets.json
+vim config/usb-secrets.json
+
+./build-usb.sh \
+  --device /dev/sdX \
+  --configure \
+  --secure-file config/usb-secrets.json
 ```
 
-The wrapper obtains root privilege, asks for the LUKS passphrase and Linux user password, requires the exact erase phrase, installs Arch, enrols the Secure Boot owner keys, creates both UKIs, and signs/registers every EFI executable.
+Read [docs/USB.md](docs/USB.md) before selecting the device.
 
-### 4. Enable Secure Boot and finish
+## Boot and install
 
-After installation:
+Before booting the USB:
 
-1. Reboot into firmware setup.
-2. Enable Secure Boot without clearing or restoring keys.
-3. Remove the USB and boot Arch.
-4. Enter the retained LUKS passphrase once and log in.
-5. Run:
+1. use UEFI-only mode;
+2. enable the TPM/security chip;
+3. disable Secure Boot;
+4. clear Secure Boot keys so Setup Mode is enabled;
+5. do not restore factory keys.
+
+The `archws` menu starts automatically. Option 1 checks connectivity, offers `iwctl` when Wi-Fi is not yet connected, then uses the live repository and Arch package sources and refreshes the persistent cache before installation. Option 2 uses the cached project and official packages. The normal installer still requires the exact `ERASE /dev/...` confirmation.
+
+After the installer enrols and signs the owner-controlled boot chain:
+
+1. enter firmware setup;
+2. enable Secure Boot without clearing or restoring keys;
+3. boot Arch and log in;
+4. run:
 
 ```bash
 archctl finish
 ```
 
-`finish` is safe to rerun. Run it normally; an accidental `sudo archctl finish` is automatically dropped back to the invoking user. It detects the current stage, opens one sudo session, provisions the machine, installs the AUR allow-list, re-verifies the signed boot chain, enrols TPM2 unlock, and runs the strict final audit. TPM enrolment still asks for the retained LUKS credential and the new daily PIN because those secrets should not be stored in the repository.
+When the encrypted USB credential bundle supplied the LUKS passphrase and TPM PIN, `finish` uses the staged credentials automatically for TPM enrolment. Otherwise it prompts interactively. The long LUKS passphrase remains the recovery route.
 
-On the next reboot, normal startup should ask for the TPM PIN rather than the long LUKS passphrase. Keep the long passphrase as the recovery route.
+## Refresh an existing USB without installing
 
-## Existing 0.1 installation
-
-Extract the 0.2 release somewhere outside `/opt/arch-workstation`, then run:
+From the live menu choose **Refresh all offline caches without installing**, or from Arch:
 
 ```bash
-./upgrade-existing.sh
-archctl finish
+./build-usb.sh --refresh-only --device /dev/sdX
 ```
 
-The upgrader creates a root-only backup in `/var/backups/arch-workstation`, preserves `/etc/arch-installer/install.conf`, replaces the installed automation atomically, and enables the reduced-prompt defaults. See [docs/MIGRATION.md](docs/MIGRATION.md).
+This refreshes the writable cache only and preserves the USB's existing installation configuration and encrypted credential bundle. Add `--configure`, `--set KEY=VALUE`, `--secure-file PATH`, or `--no-secrets` only when you deliberately want to change those items. Rebuild the USB normally to replace the immutable custom boot ISO.
 
-## Commands
+A USB made by v0.1/v0.2 with the old `mason-arch`/`bootmnt` arrangement cannot be converted with `--refresh-only`; it must be erased and rebuilt once with v0.3.
+
+## Installed-system commands
 
 ```text
 archctl finish              Resume the complete first-boot workflow
@@ -133,35 +120,37 @@ archctl snapshot TEXT       Create a manual Snapper root snapshot
 archctl update              Update packages, rebuild UKIs, sign, and verify
 ```
 
-Running `/opt/arch-workstation/start.sh` or `arch-workstation-start` on an installed system is equivalent to `archctl finish` when no command is supplied.
+The installed repository also exposes `arch-workstation-build-usb` as a symlink to `build-usb.sh`.
 
 ## Repository layout
 
 ```text
 .
-├── install.sh                 destructive live-ISO installer
-├── start.sh                   context-aware compatibility entry point
-├── upgrade-existing.sh        safe migration of an installed automation copy
-├── archctl                    installed-system command dispatcher
-├── config/                    user-editable policy
-├── scripts/install/           preflight, disk, base, and chroot stages
-├── scripts/security/          state, signing, TPM, recovery, and verification
-├── ansible/                   idempotent workstation roles
-├── powershell/                PowerShell profile/module configuration
-├── dotfiles/                  Git and Vim defaults
-├── vscode/                    settings and extension allow-list
-├── docs/                      operations, security, recovery, and design
-└── tests/                     static, structural, and package checks
+├── build-usb.sh              custom ArchISO/USB entry point
+├── usb/                      builder, launcher, cache, config, and secrets tooling
+├── install.sh                destructive workstation installer
+├── start.sh                  live/install and installed-system compatibility entry point
+├── upgrade-existing.sh       safe migration of installed automation
+├── archctl                   installed-system command dispatcher
+├── config/                   machine policy and secret-file example
+├── scripts/install/          preflight, disk, base, and chroot stages
+├── scripts/security/         state, signing, TPM, recovery, and verification
+├── ansible/                  idempotent workstation roles
+├── powershell/               PowerShell profile/module configuration
+├── dotfiles/                 Git and Vim defaults
+├── vscode/                   settings and extension allow-list
+├── docs/                     USB, installation, security, recovery, and design
+└── tests/                    static and non-destructive functional checks
 ```
 
 ## Important limits
 
 - Whole-disk installation only; no dual boot or partition preservation.
-- No hibernation; zram is used instead.
+- The offline cache guarantees configured official Arch packages, not complete AUR/upstream payload availability.
+- The custom ISO is immutable while booted; cache refresh does not rewrite it.
+- A public credential-free HTTPS Git URL is the simplest live source. Private repository authentication is not embedded automatically.
 - Snapshots are not backups.
-- Docker-group membership is effectively root-equivalent.
-- AUR packages execute community-maintained build instructions; non-interactive mode trades review friction for automation.
-- TPM unlocking is a convenience and measured-boot control, not a substitute for an offline recovery credential.
-- A firmware reset, Secure Boot key change, TPM clear, or motherboard replacement can require the retained LUKS passphrase.
+- Docker-group membership is root-equivalent.
+- Firmware key changes, TPM clearing, or motherboard replacement can require the retained LUKS passphrase.
 
-Read [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/SECURITY.md](docs/SECURITY.md), and [docs/RECOVERY.md](docs/RECOVERY.md) before relying on the installation for important data.
+Read [docs/USB.md](docs/USB.md), [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/SECURITY.md](docs/SECURITY.md), and [docs/RECOVERY.md](docs/RECOVERY.md) before relying on the installation for important data.

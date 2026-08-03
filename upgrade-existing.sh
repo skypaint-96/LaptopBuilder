@@ -56,7 +56,8 @@ done
 
 for script in "$SOURCE_ROOT"/*.sh "$SOURCE_ROOT"/archctl "$SOURCE_ROOT"/scripts/*.sh \
   "$SOURCE_ROOT"/scripts/install/*.sh "$SOURCE_ROOT"/scripts/lib/*.sh \
-  "$SOURCE_ROOT"/scripts/security/*.sh "$SOURCE_ROOT"/tests/*.sh; do
+  "$SOURCE_ROOT"/scripts/security/*.sh "$SOURCE_ROOT"/usb/*.sh \
+  "$SOURCE_ROOT"/usb/lib/*.sh "$SOURCE_ROOT"/usb/live/* "$SOURCE_ROOT"/tests/*.sh; do
   bash -n "$script"
 done
 
@@ -90,11 +91,17 @@ echo "Staging arch-workstation $version. Backup: $backup"
 rsync -a --delete \
   --exclude='.git/' \
   --exclude='config/install.conf' \
+  --exclude='config/usb-secrets.json' \
   --exclude='config/secrets.conf' \
   --exclude='config/secrets.env' \
   --exclude='*.secret' \
   --exclude='*.key' \
   --exclude='*.pem' \
+  --exclude='*.gpg' \
+  --exclude='*.iso' \
+  --exclude='*.bundle' \
+  --exclude='usb/output/' \
+  --exclude='usb/work/' \
   --exclude='*.zip' \
   --exclude='*.tar.gz' \
   "$SOURCE_ROOT/" "$stage/"
@@ -102,8 +109,9 @@ rsync -a --delete \
 rm -f "$stage/config/install.conf"
 ln -s "$CONFIG_FILE" "$stage/config/install.conf"
 printf '%s\n' "release-$version" > "$stage/BUILD_COMMIT"
-chmod 0755 "$stage/install.sh" "$stage/start.sh" "$stage/archctl" "$stage/upgrade-existing.sh"
-find "$stage/scripts" "$stage/tests" -type f -name '*.sh' -exec chmod 0755 {} +
+chmod 0755 "$stage/install.sh" "$stage/start.sh" "$stage/archctl" \
+  "$stage/upgrade-existing.sh" "$stage/build-usb.sh"
+find "$stage/scripts" "$stage/usb" "$stage/tests" -type f -name '*.sh' -exec chmod 0755 {} +
 chown -R root:root "$stage"
 
 config_backup="$BACKUP_DIR/install.conf-before-${version}-${timestamp}"
@@ -144,6 +152,7 @@ stage=""
 install -d -m 0755 "$BIN_DIR" "$MIGRATION_STATE_DIR"
 ln -sfn "$TARGET_ROOT/archctl" "$BIN_DIR/archctl"
 ln -sfn "$TARGET_ROOT/start.sh" "$BIN_DIR/arch-workstation-start"
+ln -sfn "$TARGET_ROOT/build-usb.sh" "$BIN_DIR/arch-workstation-build-usb"
 
 UPGRADE_COMMITTED=true
 rm -rf "$old"

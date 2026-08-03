@@ -11,6 +11,7 @@ UUID=$root_uuid  /                       btrfs  rw,noatime,compress=zstd:1,subvo
 UUID=$root_uuid  /home                   btrfs  rw,noatime,compress=zstd:1,subvol=@home       0 0
 UUID=$root_uuid  /var/log                btrfs  rw,noatime,compress=zstd:1,subvol=@var_log    0 0
 UUID=$root_uuid  /var/cache/pacman/pkg   btrfs  rw,noatime,compress=zstd:1,subvol=@pkg        0 0
+UUID=$root_uuid  /var/lib/arch-workstation/pending-credentials btrfs rw,noatime,compress=zstd:1,subvol=@credentials 0 0
 UUID=$root_uuid  /.snapshots             btrfs  rw,noatime,compress=zstd:1,subvol=@snapshots  0 0
 UUID=$esp_uuid   /efi                    vfat   rw,relatime,fmask=0077,dmask=0077,utf8,errors=remount-ro    0 2
 EOF_FSTAB
@@ -30,22 +31,48 @@ copy_repository_to_target() {
   fi
   if [[ -n $git_toplevel && $(readlink -f "$git_toplevel") == $(readlink -f "$REPO_ROOT") ]]; then
     provenance=$(git -C "$REPO_ROOT" rev-parse HEAD)
-    if ! git -C "$REPO_ROOT" diff --quiet HEAD --; then
+    if ! git -C "$REPO_ROOT" diff --quiet HEAD -- \
+      || ! git -C "$REPO_ROOT" diff --cached --quiet HEAD -- \
+      || [[ -n $(git -C "$REPO_ROOT" ls-files --others --exclude-standard) ]]; then
       provenance+="-dirty"
     fi
     (
       cd "$REPO_ROOT" || exit 1
-      git ls-files -z | tar --null --files-from=- --create --file=-
+      git ls-files -z \
+        | tar --create --file=- --null \
+          --exclude='config/install.conf' \
+          --exclude='config/usb-secrets.json' \
+          --exclude='config/secrets.conf' \
+          --exclude='config/secrets.env' \
+          --exclude='*.secret' \
+          --exclude='*.key' \
+          --exclude='*.pem' \
+          --exclude='*.gpg' \
+          --exclude='*.iso' \
+          --exclude='*.bundle' \
+          --exclude='*.zip' \
+          --exclude='*.tar.gz' \
+          --exclude='usb/output' \
+          --exclude='usb/output/*' \
+          --exclude='usb/work' \
+          --exclude='usb/work/*' \
+          --files-from=-
     ) | tar -C "$target" -xf -
   else
     tar -C "$REPO_ROOT" \
       --exclude='.git' \
       --exclude='config/install.conf' \
+      --exclude='config/usb-secrets.json' \
       --exclude='config/secrets.conf' \
       --exclude='config/secrets.env' \
       --exclude='*.secret' \
       --exclude='*.key' \
       --exclude='*.pem' \
+      --exclude='*.gpg' \
+      --exclude='*.iso' \
+      --exclude='*.bundle' \
+      --exclude='usb/output' \
+      --exclude='usb/work' \
       --exclude='*.zip' \
       --exclude='*.tar.gz' \
       -cf - . | tar -C "$target" -xf -
@@ -53,8 +80,9 @@ copy_repository_to_target() {
   printf '%s\n' "$provenance" > "$target/BUILD_COMMIT"
 
   install -Dm0644 "$CONFIG_FILE" "$target/config/install.conf"
-  chmod 0755 "$target/install.sh" "$target/start.sh" "$target/archctl" "$target/upgrade-existing.sh"
-  find "$target/scripts" -type f -name '*.sh' -exec chmod 0755 {} +
+  chmod 0755 "$target/install.sh" "$target/start.sh" "$target/archctl" \
+    "$target/upgrade-existing.sh" "$target/build-usb.sh"
+  find "$target/scripts" "$target/usb" -type f -name '*.sh' -exec chmod 0755 {} +
 }
 
 enable_live_iso_multilib() {
@@ -94,7 +122,12 @@ enable_live_iso_multilib() {
 
   pacman-conf --repo-list | grep -qx multilib \
     || die "Could not enable the multilib repository in the live ISO."
-  pacman -Sy --noconfirm
+  if [[ ${ARCHWS_SOURCE_MODE:-live} == offline ]]; then
+    [[ -e /var/lib/pacman/sync/multilib.db || -e /var/lib/pacman/sync/multilib.db.tar.gz ]] \
+      || die "The cached multilib database is unavailable in offline mode."
+  else
+    pacman -Sy --noconfirm
+  fi
   pacman -Slq multilib >/dev/null 2>&1 \
     || die "The multilib repository database is unavailable in the live ISO."
 }
@@ -115,7 +148,7 @@ build_package_lists() {
   esac
 
   BASE_INSTALL_PACKAGES=(
-    base base-devel "${kernels[@]}" linux-firmware wireless-regdb "${cpu_packages[@]}"
+    base base-devel archlinux-keyring "${kernels[@]}" linux-firmware wireless-regdb "${cpu_packages[@]}"
     btrfs-progs cryptsetup dosfstools gptfdisk efibootmgr
     mkinitcpio systemd-ukify sbsigntools sbctl tpm2-tools tpm2-tss
     networkmanager wpa_supplicant openssh
@@ -171,8 +204,72 @@ verify_live_package_resolution() {
     || die "One or more required official packages cannot be resolved. Check mirrors and repository configuration."
 }
 
+verify_offline_package_payloads() {
+  build_package_lists
+  local cache_dir=${ARCHWS_PACKAGE_CACHE_DIR:-}
+  local sync_dir=${ARCHWS_SYNC_CACHE_DIR:-}
+  local db_path url filename transaction_output
+  local -a urls=() missing=()
+
+  [[ -n $cache_dir && -d $cache_dir ]] || die 'Offline package cache directory is unavailable.'
+  [[ -n $sync_dir && -d $sync_dir ]] || die 'Offline package database directory is unavailable.'
+  db_path=$(dirname -- "$sync_dir")
+
+  info 'Verifying that every package in the offline transaction has a cached payload.'
+  if ! transaction_output=$(
+      pacman --dbpath "$db_path" --cachedir "$cache_dir" \
+        -Sp --noconfirm --print-format '%l' "${REQUIRED_OFFICIAL_PACKAGES[@]}"
+    ); then
+    die 'Could not resolve the complete offline package transaction.'
+  fi
+  mapfile -t urls <<< "$transaction_output"
+
+  for url in "${urls[@]}"; do
+    [[ -n $url ]] || continue
+    filename=${url##*/}
+    [[ -s $cache_dir/$filename ]] || missing+=("$filename")
+  done
+  if ((${#missing[@]})); then
+    printf 'Missing offline package payloads:\n' >&2
+    printf '  %s\n' "${missing[@]}" >&2
+    die 'Refresh the USB package cache before attempting an offline installation.'
+  fi
+  success "Verified ${#urls[@]} cached package payloads for the offline transaction."
+}
+
+resolve_offline_base_package_files() {
+  local cache_dir=${ARCHWS_PACKAGE_CACHE_DIR:-}
+  local sync_dir=${ARCHWS_SYNC_CACHE_DIR:-}
+  local db_path transaction_output url filename package_path
+  local -a package_paths=()
+
+  [[ -n $cache_dir && -d $cache_dir ]] || die 'Offline package cache directory is unavailable.'
+  [[ -n $sync_dir && -d $sync_dir ]] || die 'Offline package database directory is unavailable.'
+  db_path=$(dirname -- "$sync_dir")
+
+  transaction_output=$(
+    pacman --dbpath "$db_path" --cachedir "$cache_dir" \
+      -Sp --noconfirm --print-format '%l' "${BASE_INSTALL_PACKAGES[@]}"
+  ) || die 'Could not resolve the offline base-system transaction.'
+
+  while IFS= read -r url; do
+    [[ -n $url ]] || continue
+    filename=${url##*/}
+    package_path="$cache_dir/$filename"
+    [[ -s $package_path ]] || die "Offline base package is missing: $filename"
+    package_paths+=("$package_path")
+  done <<< "$transaction_output"
+
+  ((${#package_paths[@]})) || die 'The offline base-system transaction resolved to no package files.'
+  printf '%s\n' "${package_paths[@]}" | sort -u
+}
+
 verify_aur_package_resolution() {
   bool_true "$ENABLE_AUR" || return 0
+  if [[ ${ARCHWS_SOURCE_MODE:-live} == offline ]]; then
+    warn "Skipping live AUR metadata verification in offline mode; AUR applications are completed during first-boot provisioning when online."
+    return 0
+  fi
 
   local -a packages curl_args
   local package response
@@ -192,11 +289,68 @@ verify_aur_package_resolution() {
   done
 }
 
+stage_first_boot_credentials() {
+  if ! bool_true "$ENABLE_TPM" || ! bool_true "$STAGE_TPM_CREDENTIALS"; then
+    unset INSTALL_LUKS_RECOVERY_CREDENTIAL INSTALL_TPM_PIN_CREDENTIAL 2>/dev/null || true
+    return 0
+  fi
+  [[ -n ${INSTALL_LUKS_RECOVERY_CREDENTIAL:-} ]] \
+    || die "The retained LUKS credential is unavailable for first-boot TPM enrollment."
+
+  local pending="$INSTALL_ROOT/var/lib/arch-workstation/pending-credentials"
+  install -d -m 0700 "$pending"
+  chattr +C "$pending" 2>/dev/null || true
+  printf '%s' "$INSTALL_LUKS_RECOVERY_CREDENTIAL" > "$pending/luks-passphrase"
+  chmod 0600 "$pending/luks-passphrase"
+  if bool_true "$TPM_WITH_PIN"; then
+    [[ -n ${INSTALL_TPM_PIN_CREDENTIAL:-} ]] \
+      || die "The TPM2 PIN is unavailable for first-boot enrollment."
+    printf '%s' "$INSTALL_TPM_PIN_CREDENTIAL" > "$pending/tpm2-pin"
+    chmod 0600 "$pending/tpm2-pin"
+  fi
+  cat > "$pending/README" <<'EOF_PENDING'
+Temporary credentials staged inside the encrypted root filesystem by the installer.
+They are removed immediately after successful TPM2 enrollment.
+EOF_PENDING
+  chmod 0600 "$pending/README"
+  unset INSTALL_LUKS_RECOVERY_CREDENTIAL INSTALL_TPM_PIN_CREDENTIAL
+}
+
+copy_persistent_package_cache_to_target() {
+  local package_cache=${ARCHWS_PACKAGE_CACHE_DIR:-} sync_cache=${ARCHWS_SYNC_CACHE_DIR:-}
+  if [[ -n $package_cache && -d $package_cache ]]; then
+    info "Copying the persistent official package cache into the encrypted target."
+    rsync -a "$package_cache/" "$INSTALL_ROOT/var/cache/pacman/pkg/"
+  fi
+  if [[ -n $sync_cache && -d $sync_cache ]]; then
+    mkdir -p "$INSTALL_ROOT/var/lib/pacman/sync"
+    rsync -a --delete "$sync_cache/" "$INSTALL_ROOT/var/lib/pacman/sync/"
+  fi
+}
+
 install_base_system() {
   info "Installing the base Arch system and a minimal graphical login."
   build_package_lists
   enable_live_iso_multilib
-  pacstrap -K "$INSTALL_ROOT" "${BASE_INSTALL_PACKAGES[@]}"
+  if [[ ${ARCHWS_SOURCE_MODE:-live} == offline ]]; then
+    local offline_file_list
+    local -a offline_package_files=()
+    offline_file_list=$(resolve_offline_base_package_files) \
+      || die 'Failed to construct the verified offline base-package file list.'
+    mapfile -t offline_package_files <<< "$offline_file_list"
+    info "Installing ${#offline_package_files[@]} cached package files without repository synchronisation."
+    # pacstrap's normal sync mode is -Sy even when -c uses the host cache. -U
+    # is therefore required for a genuinely offline bootstrap from local files.
+    pacstrap -U "$INSTALL_ROOT" "${offline_package_files[@]}"
+  else
+    local -a pacstrap_args=(-K)
+    if bool_true "${ARCHWS_PACSTRAP_USE_HOST_CACHE:-false}"; then
+      pacstrap_args+=(-c)
+    fi
+    pacstrap "${pacstrap_args[@]}" "$INSTALL_ROOT" "${BASE_INSTALL_PACKAGES[@]}"
+  fi
+  copy_persistent_package_cache_to_target
+  stage_first_boot_credentials
   write_target_fstab
   copy_repository_to_target
 
@@ -215,10 +369,13 @@ install_base_system() {
 # Runtime safety overrides added by the installer. Re-enable deliberately after boot.
 LUKS_PASSPHRASE_FILE=""
 USER_PASSWORD_FILE=""
+TPM_PIN_FILE=""
 NONINTERACTIVE=false
 WIPE_CONFIRMATION=""
 ALLOW_NON_ARCHISO=false
 EOF_RUNTIME
+  printf 'INITIAL_INSTALL_SOURCE_MODE=%q\n' "${ARCHWS_SOURCE_MODE:-live}" \
+    >> "$INSTALL_ROOT/etc/arch-installer/install.conf"
 
   success "Base packages installed."
 }

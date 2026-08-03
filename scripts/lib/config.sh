@@ -42,6 +42,9 @@ set_config_defaults() {
   REQUIRE_TPM=true
   TPM_PCRS="7"
   TPM_WITH_PIN=true
+  TPM_PIN_MIN_LENGTH=6
+  TPM_PIN_NUMERIC_ONLY=true
+  STAGE_TPM_CREDENTIALS=true
 
   T480_BATTERY_THRESHOLDS=false
   T480_START_CHARGE=40
@@ -49,6 +52,8 @@ set_config_defaults() {
 
   LUKS_PASSPHRASE_FILE=""
   USER_PASSWORD_FILE=""
+  TPM_PIN_FILE=""
+  INITIAL_INSTALL_SOURCE_MODE="live"
   NONINTERACTIVE=false
   WIPE_CONFIRMATION=""
   ALLOW_NON_ARCHISO=false
@@ -112,6 +117,10 @@ validate_config() {
   [[ $AUR_HELPER_PACKAGE == paru || $AUR_HELPER_PACKAGE == paru-bin ]] \
     || die "AUR_HELPER_PACKAGE must be paru or paru-bin."
   [[ $TPM_PCRS =~ ^[0-9]+([+][0-9]+)*$ ]] || die "TPM_PCRS must look like 7 or 7+11."
+  [[ $TPM_PIN_MIN_LENGTH =~ ^[0-9]+$ ]] || die "TPM_PIN_MIN_LENGTH must be an integer."
+  ((TPM_PIN_MIN_LENGTH >= 4 && TPM_PIN_MIN_LENGTH <= 64)) || die "TPM_PIN_MIN_LENGTH must be between 4 and 64."
+  [[ $INITIAL_INSTALL_SOURCE_MODE == live || $INITIAL_INSTALL_SOURCE_MODE == offline ]] \
+    || die "INITIAL_INSTALL_SOURCE_MODE must be live or offline."
   [[ $T480_START_CHARGE =~ ^[0-9]+$ && $T480_STOP_CHARGE =~ ^[0-9]+$ ]] || die "Battery thresholds must be integers."
   ((T480_START_CHARGE >= 0 && T480_START_CHARGE < T480_STOP_CHARGE && T480_STOP_CHARGE <= 100)) || die "Invalid T480 battery threshold range."
 
@@ -120,7 +129,8 @@ validate_config() {
     ENABLE_DOCKER DOCKER_ADD_USER_TO_GROUP ENABLE_GAMING ENABLE_SNAPSHOTS ENABLE_T480 \
     ENABLE_POWERSHELL_PROFILE INSTALL_POWERSHELL_MODULES INSTALL_VSCODE_EXTENSIONS \
     ENABLE_BLUETOOTH ENABLE_SSH ENABLE_SECURE_BOOT REQUIRE_SETUP_MODE_AT_INSTALL \
-    AUTO_PREPARE_SECURE_BOOT SBCTL_ENROLL_MICROSOFT ENABLE_TPM REQUIRE_TPM TPM_WITH_PIN T480_BATTERY_THRESHOLDS \
+    AUTO_PREPARE_SECURE_BOOT SBCTL_ENROLL_MICROSOFT ENABLE_TPM REQUIRE_TPM TPM_WITH_PIN \
+    TPM_PIN_NUMERIC_ONLY STAGE_TPM_CREDENTIALS T480_BATTERY_THRESHOLDS \
     NONINTERACTIVE ALLOW_NON_ARCHISO; do
     validate_bool "$boolean"
   done
@@ -143,6 +153,12 @@ validate_config() {
   if bool_true "$REQUIRE_TPM" && ! bool_true "$ENABLE_TPM"; then
     die "REQUIRE_TPM=true is inconsistent with ENABLE_TPM=false."
   fi
+  if bool_true "$TPM_WITH_PIN" && ! bool_true "$ENABLE_TPM"; then
+    die "TPM_WITH_PIN=true requires ENABLE_TPM=true."
+  fi
+  if bool_true "$STAGE_TPM_CREDENTIALS" && ! bool_true "$ENABLE_TPM"; then
+    die "STAGE_TPM_CREDENTIALS=true requires ENABLE_TPM=true."
+  fi
   if ! bool_true "$ENABLE_AUR" && \
     { bool_true "$ENABLE_POWERSHELL_PROFILE" || bool_true "$INSTALL_VSCODE_EXTENSIONS"; }; then
     die "PowerShell profile or VS Code extension setup requires ENABLE_AUR=true with the configured binary packages."
@@ -161,7 +177,7 @@ Desktop        : Xfce on X11
 Secure Boot    : $ENABLE_SECURE_BOOT (Setup Mode required now: $REQUIRE_SETUP_MODE_AT_INSTALL)
 Auto SB prepare : $AUTO_PREPARE_SECURE_BOOT
 Microsoft certs: $SBCTL_ENROLL_MICROSOFT
-TPM2           : $ENABLE_TPM (PCRs: $TPM_PCRS, PIN: $TPM_WITH_PIN)
+TPM2           : $ENABLE_TPM (PCRs: $TPM_PCRS, PIN: $TPM_WITH_PIN, staged credentials: $STAGE_TPM_CREDENTIALS)
 Snapshots      : $ENABLE_SNAPSHOTS
 SSD TRIM       : $ENABLE_SSD_TRIM
 Docker/gaming  : $ENABLE_DOCKER / $ENABLE_GAMING

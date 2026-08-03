@@ -12,6 +12,10 @@ make test
 
 This checks:
 
+- custom USB layout, launcher, configuration setter, and removal of the obsolete mount dependency;
+- encrypted secret-bundle creation, checksum validation, decryption, permissions, and insecure-input rejection;
+- offline Git bundle creation and cloneability;
+- isolated staged-credential and systemd credential wiring;
 - Bash syntax and, when installed, ShellCheck findings;
 - configuration defaults and invalid dependency combinations;
 - YAML and JSON syntax;
@@ -41,6 +45,6 @@ Before using an important disk, test a release in a disposable x86-64 UEFI virtu
 
 Then test on a spare T480 SSD. Confirm Wi-Fi, audio, suspend/resume, both kernels, Docker, Steam, external displays, USB-C/Thunderbolt, TPM/PIN unlock, and passphrase fallback. Firmware behaviour cannot be fully validated by static checks or a virtual machine.
 
-## Version 0.2 regression coverage
+## Version 0.3 regression coverage
 
-The structural suite asserts package-source resolution before disk erasure, `paru-bin` bootstrap, single-session sudo/Ansible invocation, automatic target Secure Boot preparation, discovery/signing of every EFI binary, resumable first-boot state detection, and signed update repair. A real UEFI integration test is still required to validate firmware key enrolment and TPM behaviour on each hardware model.
+The structural suite asserts ArchISO/profile construction, byte comparison before creating persistent storage, live/cache/embedded fallback, package-source resolution before disk erasure, `paru-bin` bootstrap, single-session sudo/Ansible invocation, automatic target Secure Boot preparation, discovery/signing of every EFI binary, staged credential isolation, resumable first-boot state detection, and signed update repair. A real UEFI integration test is still required to validate firmware key enrolment and TPM behaviour on each hardware model.

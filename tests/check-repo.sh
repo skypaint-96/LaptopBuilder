@@ -5,8 +5,10 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 required=(
-  README.md LICENSE VERSION .shellcheckrc install.sh start.sh archctl upgrade-existing.sh
-  config/install.conf.example
+  README.md LICENSE VERSION .shellcheckrc install.sh start.sh archctl upgrade-existing.sh build-usb.sh
+  config/install.conf.example config/usb-secrets.json.example
+  usb/build.sh usb/cache.sh usb/configure.sh usb/secrets.sh
+  usb/API_VERSION usb/lib/common.sh usb/live/archws-live
   scripts/finish.sh scripts/provision.sh scripts/install-aur.sh scripts/update.sh
   scripts/install/01-preflight.sh
   scripts/install/10-disk.sh
@@ -25,22 +27,30 @@ required=(
   tests/test-upgrade-existing.sh
   tests/test-package-lists.sh
   tests/test-security-state.sh
+  tests/check-no-secrets.py
+  tests/test-staged-credentials.sh
+  tests/test-usb-cache.sh
+  tests/test-usb-layout.sh
+  tests/test-usb-secrets.sh
   ansible/site.yml
   docs/INSTALLATION.md docs/ARCHITECTURE.md docs/SECURITY.md docs/RECOVERY.md
   docs/CUSTOMISING.md docs/PACKAGES.md docs/REFERENCES.md docs/TESTING.md
-  docs/MIGRATION.md
+  docs/MIGRATION.md docs/USB.md
 )
 
 for path in "${required[@]}"; do
   [[ -e $path ]] || { echo "Missing required path: $path" >&2; exit 1; }
 done
 
-for path in install.sh start.sh archctl upgrade-existing.sh scripts/*.sh scripts/install/*.sh scripts/lib/*.sh scripts/security/*.sh tests/*.sh; do
+for path in install.sh start.sh archctl upgrade-existing.sh build-usb.sh \
+  scripts/*.sh scripts/install/*.sh scripts/lib/*.sh scripts/security/*.sh \
+  usb/*.sh usb/lib/*.sh usb/live/* tests/*.sh tests/check-no-secrets.py; do
   [[ -x $path ]] || { echo "Expected executable bit: $path" >&2; exit 1; }
 done
 
 [[ ! -e config/install.conf ]] || { echo 'config/install.conf must not be committed.' >&2; exit 1; }
 [[ ! -e config/secrets.conf ]] || { echo 'config/secrets.conf must not be committed.' >&2; exit 1; }
+[[ ! -e config/usb-secrets.json ]] || { echo 'config/usb-secrets.json must not be committed.' >&2; exit 1; }
 
 if grep -RIl $'\r' --exclude-dir=.git . | grep -q .; then
   echo 'CRLF line endings detected:' >&2
@@ -48,15 +58,13 @@ if grep -RIl $'\r' --exclude-dir=.git . | grep -q .; then
   exit 1
 fi
 
-if grep -RIE --exclude-dir=.git --exclude='check-repo.sh' \
-  'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}|password[[:space:]]*=[[:space:]]*[^"[:space:]]+' .; then
-  echo 'Possible committed secret material detected.' >&2
-  exit 1
-fi
-
+python3 tests/check-no-secrets.py
 grep -q 'ERASE \$DISK' scripts/install/01-preflight.sh
 grep -q 'REQUIRE_SETUP_MODE_AT_INSTALL' scripts/install/01-preflight.sh
 grep -q 'verify_live_package_resolution' scripts/install/01-preflight.sh
+grep -q 'verify_offline_package_payloads' scripts/install/01-preflight.sh
+grep -q 'resolve_offline_base_package_files' scripts/install/20-base.sh
+grep -q 'pacstrap -U' scripts/install/20-base.sh
 grep -q 'verify_aur_package_resolution' scripts/install/01-preflight.sh
 grep -q 'prepare_target_secure_boot' install.sh
 grep -q 'AUTO_PREPARE_SECURE_BOOT=true' config/install.conf.example
@@ -102,6 +110,28 @@ grep -q 'tpm_unlock_configured' scripts/security/verify.sh
 grep -q 'PK/PK.key PK/PK.pem' scripts/security/common.sh
 grep -q 'sbctl.incomplete-' scripts/security/secure-boot.sh
 grep -q 'archctl finish' start.sh
+grep -q 'ARCHWS_DATA' usb/build.sh
+grep -q 'mkarchiso' usb/build.sh
+grep -q 'sgdisk --zap-all' usb/build.sh
+grep -q 'cmp -n' usb/build.sh
+grep -q 'selected_device_backs_path' usb/build.sh
+grep -q 'Install using live project and live Arch sources' usb/live/archws-live
+grep -q 'Refresh all offline caches without installing' usb/live/archws-live
+grep -q 'project.bundle' usb/cache.sh
+grep -q 'REQUIRED_USB_API_VERSION' usb/cache.sh
+grep -q 'project_is_compatible' usb/live/archws-live
+grep -q 'validate_git_repository_source' usb/build.sh
+grep -q 'validate_git_repository_source' usb/cache.sh
+grep -q 'validate_repository_metadata' usb/live/archws-live
+grep -Fq 'if ! "$PROJECT_ROOT/usb/cache.sh"' usb/live/archws-live
+grep -q 'systemctl start iwd' usb/live/archws-live
+grep -q -- '--iso-only cannot store installation secrets' usb/build.sh
+grep -q 'sha256sums.txt' usb/cache.sh
+grep -q -- '-Syw --noconfirm' usb/cache.sh
+grep -q -- '--no-symkey-cache' usb/secrets.sh
+grep -q 'BUNDLE_PASSPHRASE_MIN_LENGTH' usb/secrets.sh
+grep -q 'pending-credentials' scripts/security/verify.sh
+grep -q 'Temporary TPM enrollment credentials have been removed' scripts/security/status.sh
 
 if grep -q 'BUILD PARU' scripts/install-aur.sh; then
   echo 'The obsolete interactive Paru build phrase remains.' >&2

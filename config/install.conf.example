@@ -61,6 +61,12 @@ REQUIRE_TPM=true
 # PCR 7 measures the Secure Boot policy and remains practical across kernel updates.
 TPM_PCRS="7"
 TPM_WITH_PIN=true
+# Six digits is the default minimum for a daily TPM PIN.
+TPM_PIN_MIN_LENGTH=6
+TPM_PIN_NUMERIC_ONLY=true
+# When credentials are supplied by the USB, retain the LUKS passphrase and TPM PIN
+# temporarily inside the encrypted target root until first-boot TPM enrollment succeeds.
+STAGE_TPM_CREDENTIALS=true
 
 # Optional battery thresholds. Disabled by default because they are personal policy.
 T480_BATTERY_THRESHOLDS=false
@@ -71,6 +77,9 @@ T480_STOP_CHARGE=80
 # files whose permissions are 0400 or 0600. Only the first line is read.
 LUKS_PASSPHRASE_FILE=""
 USER_PASSWORD_FILE=""
+TPM_PIN_FILE=""
+# Written automatically into the installed runtime configuration by the live launcher.
+INITIAL_INSTALL_SOURCE_MODE="live"
 
 # Safety controls. Keep NONINTERACTIVE=false for normal use.
 NONINTERACTIVE=false

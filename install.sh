@@ -74,7 +74,8 @@ validate_config install
 INSTALL_COMPLETED=false
 cleanup_on_exit() {
   local code=$?
-  unset INSTALL_LUKS_PASSPHRASE INSTALL_USER_PASSWORD 2>/dev/null || true
+  unset INSTALL_LUKS_PASSPHRASE INSTALL_USER_PASSWORD INSTALL_TPM_PIN \
+    INSTALL_LUKS_RECOVERY_CREDENTIAL INSTALL_TPM_PIN_CREDENTIAL 2>/dev/null || true
   if ! bool_true "$INSTALL_COMPLETED"; then
     warn "Installation did not complete; cleaning mounted target resources."
     cleanup_target || true
@@ -91,10 +92,21 @@ if bool_true "$PREFLIGHT_ONLY"; then
   exit 0
 fi
 
-# Collect both secrets before touching the target disk. They remain unexported shell
-# variables and are cleared as soon as their respective installation step is complete.
+# Collect all installation credentials before touching the target disk. They remain
+# unexported shell variables and are cleared after their respective installation step.
 read_secret_into INSTALL_LUKS_PASSPHRASE "$LUKS_PASSPHRASE_FILE" "LUKS passphrase" true
+INSTALL_LUKS_RECOVERY_CREDENTIAL=$INSTALL_LUKS_PASSPHRASE
 read_secret_into INSTALL_USER_PASSWORD "$USER_PASSWORD_FILE" "Password for $USERNAME" true
+if bool_true "$ENABLE_TPM" && bool_true "$TPM_WITH_PIN"; then
+  read_secret_into INSTALL_TPM_PIN "$TPM_PIN_FILE" "TPM2 PIN" true
+  if bool_true "$TPM_PIN_NUMERIC_ONLY" && [[ ! $INSTALL_TPM_PIN =~ ^[0-9]+$ ]]; then
+    die "The TPM2 PIN must contain digits only."
+  fi
+  ((${#INSTALL_TPM_PIN} >= TPM_PIN_MIN_LENGTH)) \
+    || die "The TPM2 PIN must be at least $TPM_PIN_MIN_LENGTH characters."
+  INSTALL_TPM_PIN_CREDENTIAL=$INSTALL_TPM_PIN
+  unset INSTALL_TPM_PIN
+fi
 
 prepare_disk
 install_base_system

@@ -22,7 +22,7 @@ load_config "$ROOT/config/install.conf.example"
 validate_config runtime
 build_package_lists
 
-for package in base linux linux-lts sbctl systemd-ukify steam lib32-gamemode lib32-vulkan-intel dotnet-sdk docker snapper tlp; do
+for package in base archlinux-keyring linux linux-lts sbctl systemd-ukify steam lib32-gamemode lib32-vulkan-intel dotnet-sdk docker snapper tlp; do
   contains "$package" "${REQUIRED_OFFICIAL_PACKAGES[@]}" \
     || { echo "Required Intel/T480 package missing: $package" >&2; exit 1; }
 done
@@ -43,5 +43,23 @@ contains intel-ucode "${REQUIRED_OFFICIAL_PACKAGES[@]}" && {
   echo 'Intel microcode leaked into AMD profile.' >&2
   exit 1
 }
+
+TEMP=$(mktemp -d)
+trap 'rm -rf "$TEMP"' EXIT
+mkdir -p "$TEMP/cache" "$TEMP/db/sync"
+printf 'cached package\n' > "$TEMP/cache/base-1-1-x86_64.pkg.tar.zst"
+printf 'cached package\n' > "$TEMP/cache/bash-1-1-x86_64.pkg.tar.zst"
+ARCHWS_PACKAGE_CACHE_DIR="$TEMP/cache"
+ARCHWS_SYNC_CACHE_DIR="$TEMP/db/sync"
+pacman() {
+  printf '%s\n' \
+    'https://mirror.example.invalid/core/os/x86_64/base-1-1-x86_64.pkg.tar.zst' \
+    'https://mirror.example.invalid/core/os/x86_64/bash-1-1-x86_64.pkg.tar.zst'
+}
+mapfile -t offline_files < <(resolve_offline_base_package_files)
+[[ ${#offline_files[@]} == 2 ]]
+[[ ${offline_files[0]} == "$TEMP/cache/base-1-1-x86_64.pkg.tar.zst" ]]
+[[ ${offline_files[1]} == "$TEMP/cache/bash-1-1-x86_64.pkg.tar.zst" ]]
+unset -f pacman
 
 echo 'Official package-list construction tests passed.'

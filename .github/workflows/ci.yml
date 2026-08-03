@@ -19,7 +19,7 @@ jobs:
       - name: Install validation tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes shellcheck
+          sudo apt-get install --yes git gnupg jq shellcheck
           python3 -m pip install --disable-pip-version-check ansible-core -r tests/requirements.txt
 
       - name: Require PowerShell parser

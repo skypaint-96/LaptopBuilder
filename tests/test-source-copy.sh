@@ -31,6 +31,7 @@ target="$INSTALL_ROOT/opt/arch-workstation"
 [[ -x $target/install.sh ]] || { echo 'Installer executable mode was not preserved.' >&2; exit 1; }
 [[ -x $target/start.sh ]] || { echo 'Compatibility start wrapper was not copied as executable.' >&2; exit 1; }
 [[ -x $target/upgrade-existing.sh ]] || { echo 'Upgrade helper was not copied as executable.' >&2; exit 1; }
+[[ -x $target/build-usb.sh ]] || { echo 'USB builder was not copied as executable.' >&2; exit 1; }
 [[ -x $target/scripts/provision.sh ]] || { echo 'Script executable mode was not restored.' >&2; exit 1; }
 [[ -r $target/config/install.conf ]] || { echo 'Runtime configuration was not staged.' >&2; exit 1; }
 [[ ! -e $target/.git ]] || { echo 'Git internals were copied into the target.' >&2; exit 1; }

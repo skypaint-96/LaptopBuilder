@@ -109,7 +109,8 @@ read_secret_into() {
   local value confirmation mode
 
   if [[ -n $secret_file ]]; then
-    [[ -f $secret_file ]] || die "Secret file not found: $secret_file"
+    [[ -f $secret_file && ! -L $secret_file ]] \
+      || die "Secret file must be a regular, non-symlink file: $secret_file"
     mode=$(stat -c '%a' "$secret_file")
     [[ $mode =~ ^[46]00$ ]] || die "Secret file $secret_file must have mode 0400 or 0600 (currently $mode)."
     IFS= read -r value < "$secret_file" || true

@@ -36,6 +36,7 @@ prepare_disk() {
   btrfs subvolume create "$INSTALL_ROOT/@var_log"
   btrfs subvolume create "$INSTALL_ROOT/@pkg"
   btrfs subvolume create "$INSTALL_ROOT/@snapshots"
+  btrfs subvolume create "$INSTALL_ROOT/@credentials"
   umount "$INSTALL_ROOT"
   TARGET_MOUNTED_BY_INSTALLER=false
 
@@ -47,12 +48,15 @@ prepare_disk() {
     "$INSTALL_ROOT/home" \
     "$INSTALL_ROOT/var/log" \
     "$INSTALL_ROOT/var/cache/pacman/pkg" \
+    "$INSTALL_ROOT/var/lib/arch-workstation/pending-credentials" \
     "$INSTALL_ROOT/.snapshots"
   mount -o "$opts,subvol=@home" "/dev/mapper/$CRYPT_NAME" "$INSTALL_ROOT/home"
   mount -o "$opts,subvol=@var_log" "/dev/mapper/$CRYPT_NAME" "$INSTALL_ROOT/var/log"
   mount -o "$opts,subvol=@pkg" "/dev/mapper/$CRYPT_NAME" "$INSTALL_ROOT/var/cache/pacman/pkg"
+  mount -o "$opts,subvol=@credentials" "/dev/mapper/$CRYPT_NAME" "$INSTALL_ROOT/var/lib/arch-workstation/pending-credentials"
   mount -o "$opts,subvol=@snapshots" "/dev/mapper/$CRYPT_NAME" "$INSTALL_ROOT/.snapshots"
   mount "$ESP_PART" "$INSTALL_ROOT/efi"
+  chmod 0700 "$INSTALL_ROOT/var/lib/arch-workstation/pending-credentials"
   chmod 0750 "$INSTALL_ROOT/.snapshots"
 
   success "Disk, encryption, and Btrfs subvolumes are ready."

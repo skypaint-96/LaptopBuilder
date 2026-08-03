@@ -12,7 +12,12 @@ It has two different idempotency models:
 ## Build stages
 
 ```text
-Official Arch ISO, firmware already in Setup Mode
+Custom Arch workstation USB, firmware already in Setup Mode
+    |
+    +-- live launcher
+    |       live Git/Arch sources by default
+    |       persistent cache or embedded fallback
+    |       optional encrypted credential bundle -> RAM
     |
     +-- Bash preflight
     |       firmware/TPM/disk checks
@@ -38,6 +43,14 @@ First boot with the retained LUKS passphrase
 ```
 
 Secure Boot owner-key preparation happens before first boot, while firmware is already in Setup Mode. TPM enrollment remains after the first verified Secure Boot boot so the token is bound to the intended measured policy.
+
+## Installation-media architecture
+
+The custom USB has an immutable hybrid ArchISO region and a writable ext4 partition labelled `ARCHWS_DATA`. The immutable layer contains the launcher and a tracked embedded repository snapshot. The writable layer contains machine configuration, optional encrypted credentials, Git mirror/bundle, the current official Arch ISO backup, pacman sync databases, package files, manifests, logs, and refresh state.
+
+At boot, project selection is evidence-based and ordered: live configured Git ref, persistent bundle, then embedded copy. A missing data partition does not prevent the embedded launcher from running. A live installation refreshes persistent caches before the normal destructive preflight. An offline installation restores cached sync databases, bind-mounts the package cache, verifies every package payload, and bootstraps the base system through pacstrap's local-file (`-U`) mode so no repository refresh is attempted.
+
+The boot ISO cannot safely rewrite itself while executing. Cache-only refresh updates `ARCHWS_DATA`; rebuilding the USB replaces the immutable ArchISO. See [USB.md](USB.md).
 
 ## Platform baseline
 
@@ -75,6 +88,7 @@ Inside the opened LUKS mapping:
 | `@var_log` | `/var/log` | Logs survive root rollback independently |
 | `@pkg` | `/var/cache/pacman/pkg` | Package cache survives root rollback independently |
 | `@snapshots` | `/.snapshots` | Snapper snapshot storage |
+| `@credentials` | `/var/lib/arch-workstation/pending-credentials` | Temporary first-boot TPM credentials, isolated from root snapshots |
 
 Mount options use `noatime` and `compress=zstd:1`. Hibernation is deliberately omitted; zram provides compressed swap without adding encrypted Btrfs swapfile and resume complexity.
 

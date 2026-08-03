@@ -1,0 +1,560 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+EMBEDDED_PROJECT=/opt/arch-workstation-embedded
+EMBEDDED_CONFIG=/etc/arch-workstation-media/install.conf
+EMBEDDED_ENV=/etc/arch-workstation-media/media.env
+MEDIA_LABEL=ARCHWS_DATA
+MEDIA_MOUNT=/run/arch-workstation-media
+MEDIA_ROOT="$MEDIA_MOUNT/arch-workstation"
+RUNTIME_ROOT=/run/arch-workstation
+PROJECT_ROOT="$RUNTIME_ROOT/project"
+RUNTIME_CONFIG="$RUNTIME_ROOT/install.conf"
+SECRETS_DIR="$RUNTIME_ROOT/secrets"
+MEDIA_AVAILABLE=false
+ARCHWS_REPO_URL=""
+ARCHWS_REPO_REF=main
+REQUIRED_USB_API_VERSION=1
+
+cleanup_runtime_secrets() {
+  rm -rf "$SECRETS_DIR"
+}
+trap cleanup_runtime_secrets EXIT
+
+log() { printf '[archws] %s\n' "$*"; }
+warn() { printf '[archws] WARNING: %s\n' "$*" >&2; }
+fail() { printf '[archws] ERROR: %s\n' "$*" >&2; return 1; }
+
+bool_true() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+validate_git_repository_url() {
+  local url=$1
+  [[ -n $url ]] || return 0
+  if [[ $url == -* ]]; then
+    fail 'The live Git URL begins with a dash and has been rejected.'
+    return 1
+  fi
+  if [[ $url == *$'\n'* || $url == *$'\r'* || $url == *$'\t'* || $url == *' '* ]]; then
+    fail 'The live Git URL contains whitespace or control characters and has been rejected.'
+    return 1
+  fi
+  case "$url" in
+    https://*)
+      if [[ ! $url =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/[A-Za-z0-9._~/%+@:-]+$ ]] \
+        || [[ $url =~ ^https://[^/]*@ ]]; then
+        fail 'The live HTTPS Git URL is unsupported or contains inline credentials.'
+        return 1
+      fi
+      ;;
+    ssh://git@*)
+      if [[ ! $url =~ ^ssh://git@[A-Za-z0-9.-]+(:[0-9]{1,5})?/[A-Za-z0-9._~/%+@:-]+$ ]]; then
+        fail 'The live SSH Git URL is unsupported.'
+        return 1
+      fi
+      ;;
+    git@*:*)
+      if [[ ! $url =~ ^git@[A-Za-z0-9.-]+:[A-Za-z0-9._~/%+@-]+$ ]]; then
+        fail 'The live SCP-style Git URL is unsupported.'
+        return 1
+      fi
+      ;;
+    *)
+      fail 'The live Git URL must use credential-free HTTPS or SSH.'
+      return 1
+      ;;
+  esac
+}
+
+validate_git_repository_ref() {
+  local ref=$1
+  if [[ -z $ref || $ref == -* ]]; then
+    fail 'The live Git ref is empty or begins with a dash.'
+    return 1
+  fi
+  if ! git check-ref-format --allow-onelevel "$ref" >/dev/null 2>&1; then
+    fail 'The live Git ref is invalid or unsafe.'
+    return 1
+  fi
+}
+
+validate_repository_metadata() {
+  validate_git_repository_url "$ARCHWS_REPO_URL" || return 1
+  validate_git_repository_ref "$ARCHWS_REPO_REF" || return 1
+  if [[ ${ARCHWS_CACHE_LAYOUT_VERSION:-} != 1 ]]; then
+    fail 'The media metadata has no supported cache-layout version.'
+    return 1
+  fi
+  if [[ ${ARCHWS_MEDIA_LABEL:-} != "$MEDIA_LABEL" ]]; then
+    fail "The media metadata label does not match $MEDIA_LABEL."
+    return 1
+  fi
+}
+
+mount_media() {
+  local device="" attempt
+  mkdir -p "$MEDIA_MOUNT" "$RUNTIME_ROOT"
+  if findmnt -rn "$MEDIA_MOUNT" >/dev/null 2>&1; then
+    MEDIA_AVAILABLE=true
+  else
+    # The kernel may expose the appended persistence partition a few seconds
+    # after the immutable ISO volume.  Wait for udev and retry by both labels
+    # rather than treating a single early lookup as a permanent mount failure.
+    command -v udevadm >/dev/null 2>&1 && udevadm settle --timeout=10 2>/dev/null || true
+    MEDIA_AVAILABLE=false
+    for attempt in {1..12}; do
+      device=$(findfs "LABEL=$MEDIA_LABEL" 2>/dev/null || true)
+      [[ -n $device ]] || device=$(findfs "PARTLABEL=$MEDIA_LABEL" 2>/dev/null || true)
+      if [[ -n $device ]] && mount -o rw,noatime "$device" "$MEDIA_MOUNT" 2>/dev/null; then
+        MEDIA_AVAILABLE=true
+        break
+      fi
+      sleep 1
+    done
+
+    if ! bool_true "$MEDIA_AVAILABLE"; then
+      warn "The writable $MEDIA_LABEL partition was not mounted after waiting for the device. Online installation can continue, but cache/config changes will not persist."
+      dmesg --level=err,warn 2>/dev/null | tail -n 20 >&2 || true
+    fi
+  fi
+
+  if bool_true "$MEDIA_AVAILABLE"; then
+    mkdir -p "$MEDIA_ROOT"/{cache,config,logs,secure,state}
+  fi
+}
+
+decode_media_environment() {
+  local path=$1 key value decoded
+  [[ -r $path ]] || return 1
+  while IFS='=' read -r key value || [[ -n ${key:-} ]]; do
+    case "$key" in
+      ARCHWS_MEDIA_VERSION_B64|ARCHWS_MEDIA_LABEL_B64|ARCHWS_REPO_URL_B64|ARCHWS_REPO_REF_B64|ARCHWS_BUILD_COMMIT_B64)
+        if ! decoded=$(printf '%s' "$value" | base64 --decode 2>/dev/null); then
+          fail "Invalid base64 value in media metadata: $key"
+          return 1
+        fi
+        if [[ $decoded == *$'\n'* || $decoded == *$'\r'* ]]; then
+          fail "Newlines are not allowed in media metadata: $key"
+          return 1
+        fi
+        case "$key" in
+          ARCHWS_MEDIA_VERSION_B64) ARCHWS_MEDIA_VERSION=$decoded ;;
+          ARCHWS_MEDIA_LABEL_B64) ARCHWS_MEDIA_LABEL=$decoded ;;
+          ARCHWS_REPO_URL_B64) ARCHWS_REPO_URL=$decoded ;;
+          ARCHWS_REPO_REF_B64) ARCHWS_REPO_REF=$decoded ;;
+          ARCHWS_BUILD_COMMIT_B64) ARCHWS_BUILD_COMMIT=$decoded ;;
+        esac
+        ;;
+      ARCHWS_CACHE_LAYOUT_VERSION)
+        if [[ $value != 1 ]]; then
+          fail "Unsupported cache layout version: $value"
+          return 1
+        fi
+        ARCHWS_CACHE_LAYOUT_VERSION=$value
+        ;;
+      ''|'#'*) ;;
+      *)
+        fail "Unexpected key in media metadata: $key"
+        return 1
+        ;;
+    esac
+  done < "$path"
+}
+
+reset_media_environment() {
+  ARCHWS_MEDIA_VERSION=''
+  ARCHWS_MEDIA_LABEL=''
+  ARCHWS_REPO_URL=''
+  ARCHWS_REPO_REF='main'
+  ARCHWS_BUILD_COMMIT=''
+  ARCHWS_CACHE_LAYOUT_VERSION=''
+}
+
+try_media_environment() {
+  local path=$1
+  reset_media_environment
+  decode_media_environment "$path" && validate_repository_metadata
+}
+
+load_media_environment() {
+  if bool_true "$MEDIA_AVAILABLE" && [[ -r $MEDIA_ROOT/media.env ]]; then
+    if try_media_environment "$MEDIA_ROOT/media.env"; then
+      return 0
+    fi
+    warn 'Persistent media metadata is invalid; using the immutable metadata embedded in the ArchISO.'
+  fi
+  if [[ -r $EMBEDDED_ENV ]] && try_media_environment "$EMBEDDED_ENV"; then
+    return 0
+  fi
+  fail 'No valid arch-workstation media metadata is available. Rebuild the USB.'
+  return 1
+}
+
+persistent_config() {
+  if bool_true "$MEDIA_AVAILABLE"; then
+    if [[ ! -e $MEDIA_ROOT/config/install.conf ]]; then
+      install -m 0600 "$EMBEDDED_CONFIG" "$MEDIA_ROOT/config/install.conf"
+    fi
+    printf '%s\n' "$MEDIA_ROOT/config/install.conf"
+  else
+    printf '%s\n' "$EMBEDDED_CONFIG"
+  fi
+}
+
+online_available() {
+  curl --fail --silent --show-error --connect-timeout 8 --max-time 15 \
+    https://archlinux.org/ -o /dev/null
+}
+
+configure_network() {
+  if online_available; then
+    log 'Internet connectivity is already available.'
+    return 0
+  fi
+
+  printf '\nCurrent interfaces:\n'
+  ip -brief link 2>/dev/null || true
+  if command -v iwctl >/dev/null 2>&1; then
+    if command -v systemctl >/dev/null 2>&1 && ! systemctl is-active --quiet iwd; then
+      systemctl start iwd || warn 'Could not start iwd automatically; iwctl may report that no station is available.'
+    fi
+    cat <<'EOF_NETWORK'
+
+Opening iwctl. A typical Wi-Fi sequence is:
+  device list
+  station DEVICE scan
+  station DEVICE get-networks
+  station DEVICE connect SSID
+  exit
+EOF_NETWORK
+    iwctl
+  elif command -v nmtui >/dev/null 2>&1; then
+    nmtui
+  else
+    fail 'No interactive Wi-Fi configuration tool is available in this live image.'
+    return 1
+  fi
+
+  if online_available; then
+    log 'Internet connectivity is now available.'
+    return 0
+  fi
+  fail 'Internet connectivity is still unavailable.'
+}
+
+ensure_online_interactively() {
+  online_available && return 0
+  warn 'Live mode requires internet access and none is currently detected.'
+  if [[ -t 0 ]]; then
+    read -r -p 'Open the network configuration tool now? [Y/n]: ' reply
+    bool_true "${reply:-yes}" && configure_network && return 0
+  fi
+  fail 'Choose offline mode or configure networking before using live sources.'
+}
+
+checkout_requested_ref() {
+  local repo=$1 ref=$2
+  if git -C "$repo" checkout --detach "$ref" >/dev/null 2>&1; then
+    return 0
+  fi
+  if git -C "$repo" checkout "$ref" >/dev/null 2>&1; then
+    return 0
+  fi
+  if git -C "$repo" checkout --detach "origin/$ref" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+project_is_compatible() {
+  local repo=$1
+  [[ -r $repo/usb/API_VERSION ]] || return 1
+  [[ $(cat "$repo/usb/API_VERSION") == "$REQUIRED_USB_API_VERSION" ]] || return 1
+  [[ -x $repo/start.sh && -x $repo/usb/cache.sh \
+    && -x $repo/usb/configure.sh && -x $repo/usb/secrets.sh ]]
+}
+
+activate_project() {
+  local requested_mode=$1 temp="$RUNTIME_ROOT/project.new" source_used=""
+  rm -rf "$temp" "$PROJECT_ROOT"
+
+  if [[ $requested_mode == live && -n $ARCHWS_REPO_URL ]] && online_available; then
+    log "Fetching live project source: $ARCHWS_REPO_URL ($ARCHWS_REPO_REF)"
+    if GIT_TERMINAL_PROMPT=0 git clone -- "$ARCHWS_REPO_URL" "$temp" \
+      && checkout_requested_ref "$temp" "$ARCHWS_REPO_REF" \
+      && project_is_compatible "$temp"; then
+      source_used=live
+    else
+      warn "The live project fetch failed or is incompatible with USB API $REQUIRED_USB_API_VERSION; trying the persistent repository cache."
+      rm -rf "$temp"
+    fi
+  fi
+
+  if [[ -z $source_used && $requested_mode != embedded ]] \
+    && bool_true "$MEDIA_AVAILABLE" \
+    && [[ -s $MEDIA_ROOT/cache/repo/project.bundle ]]; then
+    log 'Loading project source from the persistent Git bundle.'
+    if git clone -- "$MEDIA_ROOT/cache/repo/project.bundle" "$temp" \
+      && { checkout_requested_ref "$temp" "$ARCHWS_REPO_REF" || true; } \
+      && project_is_compatible "$temp"; then
+      source_used=cache
+    else
+      warn 'The persistent Git bundle could not be cloned.'
+      rm -rf "$temp"
+    fi
+  fi
+
+  if [[ -z $source_used ]]; then
+    log 'Loading the repository copy embedded in the custom ArchISO.'
+    cp -a "$EMBEDDED_PROJECT" "$temp"
+    project_is_compatible "$temp" \
+      || fail "The embedded project is incompatible with USB API $REQUIRED_USB_API_VERSION. Rebuild the USB."
+    source_used=embedded
+  fi
+
+  mv "$temp" "$PROJECT_ROOT"
+  chmod +x "$PROJECT_ROOT/start.sh" "$PROJECT_ROOT/install.sh" \
+    "$PROJECT_ROOT/archctl" "$PROJECT_ROOT/build-usb.sh" 2>/dev/null || true
+  find "$PROJECT_ROOT/usb" "$PROJECT_ROOT/scripts" -type f -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
+  [[ -x $PROJECT_ROOT/start.sh ]] || fail "Selected project source has no executable start.sh: $PROJECT_ROOT"
+
+  local commit='source archive'
+  if [[ -d $PROJECT_ROOT/.git ]]; then
+    commit=$(git -C "$PROJECT_ROOT" rev-parse --short=12 HEAD 2>/dev/null || printf unknown)
+  elif [[ -r $PROJECT_ROOT/BUILD_COMMIT ]]; then
+    commit=$(cat "$PROJECT_ROOT/BUILD_COMMIT")
+  fi
+  log "Active project source: $source_used ($commit)"
+  export ARCHWS_ACTIVE_PROJECT_SOURCE=$source_used
+}
+
+bind_package_cache() {
+  bool_true "$MEDIA_AVAILABLE" || return 0
+  local package_cache="$MEDIA_ROOT/cache/pacman/pkg"
+  mkdir -p "$package_cache" /var/cache/pacman/pkg
+  if ! findmnt -rn /var/cache/pacman/pkg >/dev/null 2>&1; then
+    mount --bind "$package_cache" /var/cache/pacman/pkg
+  fi
+}
+
+load_cached_databases() {
+  bool_true "$MEDIA_AVAILABLE" || fail 'Offline mode requires the writable media partition.'
+  local sync_cache="$MEDIA_ROOT/cache/pacman/db/sync"
+  [[ -d $sync_cache ]] || fail 'Offline package databases are absent. Run the refresh-cache option while online.'
+  rm -rf /var/lib/pacman/sync
+  mkdir -p /var/lib/pacman/sync
+  cp -a "$sync_cache"/. /var/lib/pacman/sync/
+  bind_package_cache
+}
+
+save_live_databases() {
+  bool_true "$MEDIA_AVAILABLE" || return 0
+  [[ -d /var/lib/pacman/sync ]] || return 0
+  mkdir -p "$MEDIA_ROOT/cache/pacman/db/sync"
+  rsync -a --delete /var/lib/pacman/sync/ "$MEDIA_ROOT/cache/pacman/db/sync/"
+  sync
+}
+
+refresh_cache() {
+  bool_true "$MEDIA_AVAILABLE" || fail 'A writable ARCHWS_DATA partition is required to refresh the cache.'
+  [[ -x $PROJECT_ROOT/usb/cache.sh ]] || fail 'The active project source has no usb/cache.sh.'
+  local config
+  config=$(persistent_config)
+  bind_package_cache
+  if ! "$PROJECT_ROOT/usb/cache.sh" \
+      --cache-root "$MEDIA_ROOT/cache" \
+      --config "$config" \
+      --source-repo "$PROJECT_ROOT" \
+      --repo-url "$ARCHWS_REPO_URL" \
+      --repo-ref "$ARCHWS_REPO_REF"; then
+    return 1
+  fi
+  date --iso-8601=seconds > "$MEDIA_ROOT/state/last-refresh"
+}
+
+prepare_install_inputs() {
+  local config encrypted_bundle
+  config=$(persistent_config)
+  install -m 0600 "$config" "$RUNTIME_CONFIG"
+  encrypted_bundle="$MEDIA_ROOT/secure/install-secrets.gpg"
+
+  rm -rf "$SECRETS_DIR"
+  if bool_true "$MEDIA_AVAILABLE" && [[ -s $encrypted_bundle ]]; then
+    "$PROJECT_ROOT/usb/secrets.sh" materialize \
+      --config "$RUNTIME_CONFIG" \
+      --input "$encrypted_bundle" \
+      --output-dir "$SECRETS_DIR"
+  else
+    log 'No encrypted USB secret bundle is available; collecting all credentials now.'
+    "$PROJECT_ROOT/usb/secrets.sh" collect-runtime \
+      --config "$RUNTIME_CONFIG" \
+      --output-dir "$SECRETS_DIR"
+  fi
+
+  local username
+  username=$(cat "$SECRETS_DIR/username")
+  "$PROJECT_ROOT/usb/configure.sh" --config "$RUNTIME_CONFIG" --set "USERNAME=$username"
+  "$PROJECT_ROOT/usb/configure.sh" --config "$RUNTIME_CONFIG" --set "LUKS_PASSPHRASE_FILE=$SECRETS_DIR/luks-passphrase" 2>/dev/null \
+    || set_config_direct LUKS_PASSPHRASE_FILE "$SECRETS_DIR/luks-passphrase"
+  "$PROJECT_ROOT/usb/configure.sh" --config "$RUNTIME_CONFIG" --set "USER_PASSWORD_FILE=$SECRETS_DIR/user-password" 2>/dev/null \
+    || set_config_direct USER_PASSWORD_FILE "$SECRETS_DIR/user-password"
+  if [[ -s $SECRETS_DIR/tpm2-pin ]]; then
+    "$PROJECT_ROOT/usb/configure.sh" --config "$RUNTIME_CONFIG" --set "TPM_PIN_FILE=$SECRETS_DIR/tpm2-pin" 2>/dev/null \
+      || set_config_direct TPM_PIN_FILE "$SECRETS_DIR/tpm2-pin"
+  fi
+}
+
+set_config_direct() {
+  local key=$1 value=$2 quoted temp
+  printf -v quoted '%q' "$value"
+  temp=$(mktemp "$RUNTIME_ROOT/config.XXXXXX")
+  awk -v key="$key" -v line="$key=$quoted" '
+    $0 ~ "^[[:space:]]*" key "=" { if (!done) print line; done=1; next }
+    { print }
+    END { if (!done) print line }
+  ' "$RUNTIME_CONFIG" > "$temp"
+  cat "$temp" > "$RUNTIME_CONFIG"
+  rm -f "$temp"
+}
+
+run_install() {
+  local mode=$1
+  if [[ $mode == live ]]; then
+    ensure_online_interactively
+  fi
+  activate_project "$mode"
+  prepare_install_inputs
+
+  if [[ $mode == live ]]; then
+    if bool_true "$MEDIA_AVAILABLE"; then
+      log 'Refreshing the persistent repo, Arch ISO, package databases, and package cache before installation.'
+      if ! refresh_cache; then
+        warn 'The cache refresh failed. No disk changes have occurred.'
+        read -r -p 'Continue using live package sources without a complete cache refresh? [y/N]: ' reply
+        bool_true "${reply:-no}" || return 1
+      fi
+    else
+      warn 'Continuing online without persistent cache because ARCHWS_DATA is unavailable.'
+      online_available || fail 'Neither persistent media nor a working internet connection is available.'
+    fi
+    bind_package_cache
+    export ARCHWS_SOURCE_MODE=live
+    export ARCHWS_PACSTRAP_USE_HOST_CACHE=true
+    export ARCHWS_PACKAGE_CACHE_DIR="${MEDIA_ROOT}/cache/pacman/pkg"
+    export ARCHWS_SYNC_CACHE_DIR="${MEDIA_ROOT}/cache/pacman/db/sync"
+  else
+    load_cached_databases
+    export ARCHWS_SOURCE_MODE=offline
+    export ARCHWS_PACSTRAP_USE_HOST_CACHE=true
+    export ARCHWS_PACKAGE_CACHE_DIR="${MEDIA_ROOT}/cache/pacman/pkg"
+    export ARCHWS_SYNC_CACHE_DIR="${MEDIA_ROOT}/cache/pacman/db/sync"
+  fi
+
+  log "Starting $mode installation. Destructive disk confirmation remains mandatory."
+  "$PROJECT_ROOT/start.sh" install --config "$RUNTIME_CONFIG"
+  save_live_databases
+}
+
+configure_install() {
+  activate_project live
+  bool_true "$MEDIA_AVAILABLE" || fail 'Persistent configuration requires ARCHWS_DATA.'
+  local config bundle
+  config=$(persistent_config)
+  bundle="$MEDIA_ROOT/secure/install-secrets.gpg"
+  "$PROJECT_ROOT/usb/configure.sh" --config "$config" --guided
+  if [[ -s $bundle ]]; then
+    # The encrypted bundle remains authoritative for the installation username.
+    # Do not leave that value duplicated in plaintext after a guided edit.
+    "$PROJECT_ROOT/usb/configure.sh" --config "$config" --set USERNAME=archuser >/dev/null
+    warn 'An encrypted credential bundle is present, so its username remains authoritative. Replace the bundle to change the installation username.'
+  fi
+}
+
+refresh_cache_only() {
+  ensure_online_interactively
+  activate_project live
+  refresh_cache
+}
+
+update_encrypted_secrets() {
+  activate_project live
+  bool_true "$MEDIA_AVAILABLE" || fail 'Encrypted secret storage requires ARCHWS_DATA.'
+  local config output
+  config=$(persistent_config)
+  output="$MEDIA_ROOT/secure/install-secrets.gpg"
+  "$PROJECT_ROOT/usb/secrets.sh" create --config "$config" --output "$output"
+  # Avoid duplicating the username from the encrypted bundle in plaintext.
+  "$PROJECT_ROOT/usb/configure.sh" --config "$config" --set USERNAME=archuser >/dev/null
+  sync
+}
+
+show_diagnostics() {
+  mount_media
+  load_media_environment
+  printf '\nArch workstation media diagnostics\n'
+  printf '==================================\n'
+  printf 'UEFI boot:          %s\n' "$([[ -d /sys/firmware/efi/efivars ]] && echo yes || echo no)"
+  printf 'Secure Boot:        %s\n' "$(od -An -t u1 /sys/firmware/efi/efivars/SecureBoot-* 2>/dev/null | awk '{v=$NF} END{if(v==1)print "enabled";else print "disabled"}')"
+  printf 'Setup Mode:         %s\n' "$(od -An -t u1 /sys/firmware/efi/efivars/SetupMode-* 2>/dev/null | awk '{v=$NF} END{if(v==1)print "enabled";else print "disabled"}')"
+  printf 'TPM device:         %s\n' "$([[ -e /sys/class/tpm/tpm0 ]] && echo present || echo absent)"
+  printf 'Writable media:     %s\n' "$MEDIA_AVAILABLE"
+  printf 'Repository URL:     %s\n' "${ARCHWS_REPO_URL:-not configured}"
+  printf 'Repository ref:     %s\n' "$ARCHWS_REPO_REF"
+  printf 'Internet:           %s\n' "$(online_available && echo available || echo unavailable)"
+  if bool_true "$MEDIA_AVAILABLE"; then
+    df -h "$MEDIA_MOUNT"
+    find "$MEDIA_ROOT/state" "$MEDIA_ROOT/cache" -maxdepth 2 -type f \
+      \( -name '*.env' -o -name 'last-refresh' -o -name 'package-manifest.txt' \) \
+      -print 2>/dev/null | sort
+  fi
+  printf '\nBlock devices:\n'
+  lsblk -o NAME,PATH,SIZE,FSTYPE,LABEL,PARTLABEL,MODEL,TRAN,MOUNTPOINTS
+  printf '\nRecent storage/USB errors:\n'
+  dmesg -T 2>/dev/null | grep -iE 'I/O error|buffer error|usb.*error|reset .*USB|blk_update_request|medium error' | tail -n 30 || true
+}
+
+show_menu() {
+  cat <<'MENU'
+
+Arch Workstation USB
+====================
+  1) Install using live project and live Arch sources (default)
+  2) Install using the offline project and official package cache
+  3) Refresh all offline caches without installing
+  4) Configure installation settings
+  5) Create or replace the encrypted installation-secret bundle
+  6) Configure or check networking
+  7) Run media and hardware diagnostics
+  8) Open a shell
+  9) Exit this launcher
+MENU
+}
+
+main() {
+  mount_media
+  load_media_environment
+
+  while true; do
+    show_menu
+    read -r -p 'Select [1]: ' choice
+    choice=${choice:-1}
+    case "$choice" in
+      1) run_install live; return ;;
+      2) run_install offline; return ;;
+      3) refresh_cache_only ;;
+      4) configure_install ;;
+      5) update_encrypted_secrets ;;
+      6) configure_network ;;
+      7) show_diagnostics ;;
+      8) log "Type 'archws' to return to this launcher later."; return ;;
+      9) return ;;
+      *) warn "Unknown selection: $choice" ;;
+    esac
+  done
+}
+
+main "$@"

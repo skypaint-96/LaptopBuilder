@@ -33,6 +33,7 @@ setup_active=false
 tpm_present=false
 tpm_configured=false
 tpm_ready=false
+pending_credentials=false
 
 [[ -f $STATE_DIR/provisioned ]] && provisioned=true
 secure_boot_keys_present && keys_present=true
@@ -49,7 +50,11 @@ if bool_true "$ENABLE_TPM"; then
   luks_device=$(resolve_luks_device)
   tpm_token_present "$luks_device" && tpm_present=true
   tpm_unlock_configured && tpm_configured=true
-  if bool_true "$tpm_present" && bool_true "$tpm_configured"; then
+  if [[ -s /var/lib/arch-workstation/pending-credentials/luks-passphrase \
+    || -s /var/lib/arch-workstation/pending-credentials/tpm2-pin ]]; then
+    pending_credentials=true
+  fi
+  if bool_true "$tpm_present" && bool_true "$tpm_configured" && ! bool_true "$pending_credentials"; then
     tpm_ready=true
   fi
 fi
@@ -104,6 +109,11 @@ fi
 if bool_true "$ENABLE_TPM"; then
   print_state 'LUKS2 contains a systemd TPM2 token' "$tpm_present"
   print_state 'Initramfs crypttab requests TPM2 unlock' "$tpm_configured"
+  if bool_true "$pending_credentials"; then
+    print_state 'Temporary TPM enrollment credentials have been removed' false
+  else
+    print_state 'Temporary TPM enrollment credentials have been removed' true
+  fi
 fi
 
 printf '\nCurrent stage: %s\n' "$stage"

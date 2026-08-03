@@ -58,19 +58,17 @@ Firmware resets, Secure Boot key changes, TPM clearing, motherboard replacement,
 
 ## Secrets and automation boundaries
 
-The repository never commits passwords, LUKS passphrases, TPM PINs, recovery keys, or Secure Boot private keys.
+The repository never commits passwords, LUKS passphrases, TPM PINs, recovery keys, or Secure Boot private keys. Plaintext USB secret input must be a non-symlink file with mode `0400` or `0600` and is ignored by Git.
 
-The installer collects the LUKS and user passwords before touching the disk. Optional secret files must be root-readable with mode `0400` or `0600`, and their paths are cleared from the installed configuration.
+When requested, the builder collects every missing username/password/LUKS/TPM field before the long-running build, encrypts a JSON payload with GnuPG symmetric AES-256, and verifies the ciphertext before copying it. The bundle passphrase is not stored on the USB. The live launcher decrypts once into `/run`, which is RAM-backed, and gives the installer mode-0600 credential files. The ciphertext metadata contains only schema, time, and checksum, not the username.
 
-`archctl finish` deliberately leaves these interactions manual:
+The user password is consumed during installation and is never staged for first boot. The retained LUKS credential and TPM PIN may be staged temporarily in the encrypted `@credentials` Btrfs subvolume. This nested subvolume is excluded from normal root snapshots. `archctl finish` passes them to `systemd-cryptenroll` as transient systemd service credentials, verifies the TPM token, crypttab, rebuilt UKIs, and EFI signatures, then removes the files.
 
-- the initial sudo authentication;
-- the LUKS credential used to authorise TPM enrolment;
-- TPM PIN creation;
-- optional recovery-key capture;
-- physical firmware Setup Mode and Secure Boot enforcement changes.
+Without a USB credential bundle, the same values are collected together at live-install start and TPM enrolment falls back to an interactive prompt when staged credentials are unavailable. Physical firmware Setup Mode and Secure Boot enforcement remain explicit operator actions. Optional recovery-key capture also remains explicit.
 
-Suppressing these would either require storing secrets or cross a firmware trust boundary without an explicit operator action.
+## Live repository trust
+
+The default USB workflow executes the configured live Git ref when it can be fetched. That makes the remote branch part of the installation supply chain. Use a repository you control, protect its branch, review changes, and prefer a credential-free HTTPS URL. Writable media metadata is parsed as an allow-listed base64 format and Git URLs/refs are validated before use, but these checks prevent command/option injection rather than authenticating remote content. The persistent Git bundle and embedded snapshot provide availability fallbacks, not cryptographic attestation of a compromised remote. A future high-assurance deployment should pin and independently verify a commit or signed tag.
 
 ## AUR policy
 

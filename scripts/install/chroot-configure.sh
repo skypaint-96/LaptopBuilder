@@ -199,6 +199,7 @@ chmod 0644 /etc/profile.d/arch-workstation-first-boot.sh
 
 ln -sf /opt/arch-workstation/archctl /usr/local/bin/archctl
 ln -sf /opt/arch-workstation/start.sh /usr/local/bin/arch-workstation-start
+ln -sf /opt/arch-workstation/build-usb.sh /usr/local/bin/arch-workstation-build-usb
 chown -R root:root /opt/arch-workstation
 chown root:wheel /etc/arch-installer/install.conf
 chmod 0640 /etc/arch-installer/install.conf

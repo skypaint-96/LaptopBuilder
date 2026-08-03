@@ -13,8 +13,17 @@ dist/
 *.log
 *.zip
 *.tar.gz
+*.bundle
 
 # Editors
 .vscode/
 .idea/
 *~
+
+# USB builder output and local encrypted/plaintext input
+config/usb-secrets.json
+usb/work/
+usb/output/
+usb/cache/
+*.gpg
+*.iso

@@ -72,12 +72,26 @@ preflight_install() {
     fi
   fi
 
-  info "Checking internet connectivity."
-  curl --connect-timeout 10 --max-time 30 --retry 2 -fsS https://archlinux.org/ -o /dev/null || die "Unable to reach archlinux.org."
-  timedatectl set-ntp true || warn "Could not enable network time synchronisation in the ISO."
+  local source_mode=${ARCHWS_SOURCE_MODE:-live}
+  [[ $source_mode == live || $source_mode == offline ]] || die "ARCHWS_SOURCE_MODE must be live or offline."
+  INITIAL_INSTALL_SOURCE_MODE=$source_mode
+  if [[ $source_mode == live ]]; then
+    info "Checking internet connectivity."
+    curl --connect-timeout 10 --max-time 30 --retry 2 -fsS https://archlinux.org/ -o /dev/null \
+      || die "Unable to reach archlinux.org."
+    timedatectl set-ntp true || warn "Could not enable network time synchronisation in the ISO."
+  else
+    info "Offline source mode selected; using cached repository databases and packages."
+    [[ -d /var/lib/pacman/sync ]] || die "Offline pacman databases are not available."
+    [[ -n ${ARCHWS_PACKAGE_CACHE_DIR:-} && -d ${ARCHWS_PACKAGE_CACHE_DIR:-} ]] \
+      || die "Offline package cache is not available."
+  fi
 
   enable_live_iso_multilib
   verify_live_package_resolution
+  if [[ $source_mode == offline ]]; then
+    verify_offline_package_payloads
+  fi
   verify_aur_package_resolution
 
   printf '\n'
@@ -98,6 +112,9 @@ preflight_install() {
     [[ $WIPE_CONFIRMATION == "$expected" ]] || die "NONINTERACTIVE requires WIPE_CONFIRMATION=\"$expected\"."
     [[ -n $LUKS_PASSPHRASE_FILE ]] || die "NONINTERACTIVE requires LUKS_PASSPHRASE_FILE."
     [[ -n $USER_PASSWORD_FILE ]] || die "NONINTERACTIVE requires USER_PASSWORD_FILE."
+    if bool_true "$ENABLE_TPM" && bool_true "$TPM_WITH_PIN"; then
+      [[ -n $TPM_PIN_FILE ]] || die "NONINTERACTIVE with TPM_WITH_PIN=true requires TPM_PIN_FILE."
+    fi
   else
     warn "Every partition and all data on $DISK will be destroyed."
     read -r -p "Type '$expected' to continue: " response

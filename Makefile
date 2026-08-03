@@ -16,6 +16,10 @@ structure:
 	./tests/test-upgrade-existing.sh
 	./tests/test-package-lists.sh
 	./tests/test-security-state.sh
+	./tests/test-usb-layout.sh
+	./tests/test-usb-secrets.sh
+	./tests/test-usb-cache.sh
+	./tests/test-staged-credentials.sh
 
 ansible:
 	./tests/ansible-syntax.sh

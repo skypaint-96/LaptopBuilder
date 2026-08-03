@@ -35,6 +35,10 @@ network_enabled() { systemctl is-enabled NetworkManager.service; }
 display_enabled() { systemctl is-enabled lightdm.service; }
 user_exists() { id "$USERNAME"; }
 package_installed() { pacman -Q "$1"; }
+pending_credentials_removed() {
+  [[ ! -s /var/lib/arch-workstation/pending-credentials/luks-passphrase \
+    && ! -s /var/lib/arch-workstation/pending-credentials/tpm2-pin ]]
+}
 
 check_package() {
   run_check "Package '$1' is installed" package_installed "$1"
@@ -87,6 +91,7 @@ if bool_true "$ENABLE_TPM"; then
   else
     check_fail "Initramfs crypttab requests TPM2 unlock"
   fi
+  run_check "Temporary TPM enrollment credentials have been removed" pending_credentials_removed
 fi
 
 for package in git vim dotnet-sdk gnome-keyring; do
