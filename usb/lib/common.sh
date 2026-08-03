@@ -88,14 +88,14 @@ set_shell_config_value() {
 }
 
 prompt_with_default() {
-  local output_var=$1 prompt=$2 default=${3:-} value
+  local output_var=$1 prompt=$2 default=${3:-} input
   if [[ -n $default ]]; then
-    read -r -p "$prompt [$default]: " value
-    value=${value:-$default}
+    read -r -p "$prompt [$default]: " input
+    input=${input:-$default}
   else
-    read -r -p "$prompt: " value
+    read -r -p "$prompt: " input
   fi
-  printf -v "$output_var" '%s' "$value"
+  printf -v "$output_var" '%s' "$input"
 }
 
 prompt_boolean() {
