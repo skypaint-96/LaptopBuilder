@@ -110,7 +110,8 @@ A USB made by v0.1/v0.2 with the old `mason-arch`/`bootmnt` arrangement cannot b
 ```text
 archctl finish              Resume the complete first-boot workflow
 archctl status              Show the detected setup stage and next action
-archctl provision           Reapply system and user configuration
+archctl apply               Reapply desired system and user configuration
+archctl provision           Alias for archctl apply
 archctl secure-boot         Enrol/sign or repair the Secure Boot chain
 archctl tpm-enroll          Enrol TPM2 unlocking after Secure Boot is active
 archctl tpm-remove          Return to passphrase-only unlocking

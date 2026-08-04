@@ -14,10 +14,12 @@
       - fastfetch
       - fzf
       - git
+      - github-cli
       - jq
       - less
       - man-db
       - man-pages
+      - openssh
       - pacman-contrib
       - ripgrep
       - rsync
@@ -28,6 +30,41 @@
       - zip
   register: common_packages
   changed_when: "'there is nothing to do' not in (common_packages.stdout + common_packages.stderr) | lower"
+
+- name: Configure the virtual-console keyboard layout
+  ansible.builtin.copy:
+    content: "KEYMAP={{ console_keymap }}\n"
+    dest: /etc/vconsole.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Ensure the X11 configuration directory exists
+  ansible.builtin.file:
+    path: /etc/X11/xorg.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure the X11 keyboard layout
+  ansible.builtin.copy:
+    content: |
+      Section "InputClass"
+          Identifier "system-keyboard"
+          MatchIsKeyboard "on"
+          Option "XkbLayout" "{{ x11_layout }}"
+      EndSection
+    dest: /etc/X11/xorg.conf.d/00-keyboard.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Apply the OpenSSH server policy
+  ansible.builtin.systemd_service:
+    name: sshd.service
+    enabled: "{{ enable_ssh | bool }}"
+    state: "{{ 'started' if enable_ssh | bool else 'stopped' }}"
 
 - name: Create user configuration directories
   ansible.builtin.file:

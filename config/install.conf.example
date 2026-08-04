@@ -11,6 +11,7 @@ USERNAME="mason"
 TIMEZONE="Europe/London"
 LOCALE="en_GB.UTF-8"
 KEYMAP="uk"
+X11_LAYOUT="gb"
 
 # Explicit hardware profiles keep the build reproducible. Supported GPU profiles: intel, amd, generic.
 CPU_VENDOR="intel"
@@ -46,8 +47,8 @@ ENABLE_POWERSHELL_PROFILE=true
 INSTALL_POWERSHELL_MODULES=false
 INSTALL_VSCODE_EXTENSIONS=true
 ENABLE_BLUETOOTH=true
-# The OpenSSH client is installed, but the server is disabled unless requested.
-ENABLE_SSH=false
+# Install and enable the OpenSSH server by default. Review sshd_config before exposing it beyond a trusted network.
+ENABLE_SSH=true
 
 ENABLE_SECURE_BOOT=true
 # Requiring Setup Mode before disk changes lets the installer enrol owner keys

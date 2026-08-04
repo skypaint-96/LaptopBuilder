@@ -69,6 +69,12 @@ grep -q 'verify_aur_package_resolution' scripts/install/01-preflight.sh
 grep -q 'prepare_target_secure_boot' install.sh
 grep -q 'AUTO_PREPARE_SECURE_BOOT=true' config/install.conf.example
 grep -q 'AUR_HELPER_PACKAGE="paru-bin"' config/install.conf.example
+grep -q 'X11_LAYOUT="gb"' config/install.conf.example
+grep -q 'ENABLE_SSH=true' config/install.conf.example
+grep -q 'github-cli' ansible/roles/common/tasks/main.yml
+grep -q 'Option "XkbLayout"' ansible/roles/common/tasks/main.yml
+grep -q 'Apply the OpenSSH server policy' ansible/roles/common/tasks/main.yml
+grep -q 'apply|provision' archctl
 grep -q -- '--skipreview' scripts/install-aur.sh
 grep -q 'sudo env ANSIBLE_CONFIG=' scripts/provision.sh
 grep -q 'become: false' ansible/site.yml

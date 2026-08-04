@@ -12,7 +12,8 @@ source "$REPO_ROOT/scripts/lib/config.sh"
 
 usage() {
   cat <<'EOF'
-Usage: archctl provision [--skip-upgrade]
+Usage: archctl apply [--skip-upgrade]
+       archctl provision [--skip-upgrade]
 
 Applies the system and user configuration. Run it as the configured normal user;
 it opens one sudo session and keeps that session alive for the whole operation.
@@ -71,6 +72,9 @@ declare -a ansible_args=(
   "$REPO_ROOT/ansible/site.yml"
   --extra-vars "arch_user=$USERNAME"
   --extra-vars "workstation_repo_root=$REPO_ROOT"
+  --extra-vars "console_keymap=$KEYMAP"
+  --extra-vars "x11_layout=$X11_LAYOUT"
+  --extra-vars "enable_ssh=$ENABLE_SSH"
   --extra-vars "enable_docker=$ENABLE_DOCKER"
   --extra-vars "docker_add_user_to_group=$DOCKER_ADD_USER_TO_GROUP"
   --extra-vars "enable_gaming=$ENABLE_GAMING"

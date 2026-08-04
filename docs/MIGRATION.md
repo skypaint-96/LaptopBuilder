@@ -37,6 +37,8 @@ Run as the normal user:
 archctl finish
 ```
 
+After the first-boot workflow is complete, use `archctl apply` to reapply the desired configuration without rerunning the Secure Boot/TPM state machine. Existing `install.conf` values are preserved during migration; set `ENABLE_SSH=true` there when upgrading a machine that previously opted out.
+
 An accidental `sudo archctl finish` is automatically re-executed as the invoking user.
 
 An older installation may not have every current state marker, so the first 0.3 run may repeat provisioning. The roles and package commands are idempotent. It then inspects the existing Secure Boot and TPM state, repairs/signs any EFI files that are not tracked, and stops only if a firmware action is genuinely required.

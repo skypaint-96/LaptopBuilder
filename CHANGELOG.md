@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.5 - 2026-08-04
+
+### Added
+
+- Add an explicit `X11_LAYOUT` configuration value, defaulting to `gb`, and apply it during both initial installation and repeatable Ansible provisioning.
+- Install `github-cli` from the official Arch repositories and include it in the persistent offline package cache.
+- Add `archctl apply` as the preferred alias for repeatable desired-state provisioning.
+
+### Changed
+
+- Enable and start `sshd.service` by default through `ENABLE_SSH=true`; the setting remains configurable.
+- Extend `archctl verify` to check the console/X11 keyboard policy, GitHub CLI package, and active SSH service state.
+
 ## 0.3.4
 
 ### Fixed

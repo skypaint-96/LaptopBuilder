@@ -1,6 +1,9 @@
 ---
 arch_user: mason
 workstation_repo_root: /opt/arch-workstation
+console_keymap: uk
+x11_layout: gb
+enable_ssh: true
 enable_docker: true
 docker_add_user_to_group: true
 enable_gaming: true

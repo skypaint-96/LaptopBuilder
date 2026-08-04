@@ -22,7 +22,7 @@ load_config "$ROOT/config/install.conf.example"
 validate_config runtime
 build_package_lists
 
-for package in base archlinux-keyring linux linux-lts sbctl systemd-ukify steam lib32-gamemode lib32-vulkan-intel dotnet-sdk docker snapper tlp; do
+for package in base archlinux-keyring linux linux-lts sbctl systemd-ukify steam lib32-gamemode lib32-vulkan-intel dotnet-sdk docker github-cli openssh snapper tlp; do
   contains "$package" "${REQUIRED_OFFICIAL_PACKAGES[@]}" \
     || { echo "Required Intel/T480 package missing: $package" >&2; exit 1; }
 done

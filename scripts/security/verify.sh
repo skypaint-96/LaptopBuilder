@@ -106,6 +106,10 @@ if bool_true "$ENABLE_AUR"; then
   done
 fi
 
+check_package github-cli
+run_check "Console keyboard layout matches configuration" grep -qxF "KEYMAP=$KEYMAP" /etc/vconsole.conf
+run_check "X11 keyboard layout matches configuration" grep -Eq "Option[[:space:]]+\"XkbLayout\"[[:space:]]+\"$X11_LAYOUT\"" /etc/X11/xorg.conf.d/00-keyboard.conf
+
 if bool_true "$ENABLE_DOCKER"; then
   for package in docker docker-buildx docker-compose; do
     check_package "$package"
@@ -145,6 +149,7 @@ fi
 
 if bool_true "$ENABLE_SSH"; then
   run_check "OpenSSH server is enabled by policy" systemctl is-enabled sshd.service
+  run_check "OpenSSH server is running by policy" systemctl is-active sshd.service
 elif systemctl is-enabled sshd.service >/dev/null 2>&1; then
   check_warn "OpenSSH server is enabled although ENABLE_SSH=false"
 else

@@ -19,7 +19,9 @@ Important switches include:
 | `ENABLE_GAMING` | Installs Steam and 32-bit graphics userspace |
 | `ENABLE_SNAPSHOTS` | Installs Snapper and pacman snapshots |
 | `ENABLE_T480` | Applies laptop-specific TLP, thermal, firmware, and SMART roles |
-| `ENABLE_SSH` | Enables the OpenSSH server; false by default |
+| `KEYMAP` | Sets the virtual-console keyboard map, for example `uk` |
+| `X11_LAYOUT` | Sets the graphical X11 keyboard layout, for example `gb` |
+| `ENABLE_SSH` | Installs, enables, and starts the OpenSSH server; true by default |
 | `TPM_PCRS` | Selects the systemd TPM PCR binding |
 | `TPM_WITH_PIN` | Requires a TPM PIN at early boot |
 
@@ -76,7 +78,7 @@ Add every new official package name to `tests/check-arch-packages.sh`, then run:
 make test
 ```
 
-before committing. CI resolves the official package list in a current disposable Arch container.
+before committing. CI resolves the official package list in a current disposable Arch container. After deploying an updated repository to `/opt/arch-workstation`, run `archctl apply --skip-upgrade` to converge the installed machine without performing another full package upgrade.
 
 ## Adding a new role
 

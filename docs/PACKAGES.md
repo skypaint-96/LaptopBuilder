@@ -65,8 +65,8 @@ mesa
 ## Common command-line tools
 
 ```text
-bash-completion bat btop curl fd fastfetch fzf git jq less
-man-db man-pages pacman-contrib ripgrep rsync tar unzip vim wget zip
+bash-completion bat btop curl fd fastfetch fzf git github-cli jq less
+man-db man-pages openssh pacman-contrib ripgrep rsync tar unzip vim wget zip
 ```
 
 ## Development

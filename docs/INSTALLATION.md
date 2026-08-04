@@ -50,9 +50,12 @@ The normal defaults are equivalent to:
 DISK="/dev/nvme0n1"
 HOSTNAME="arch-t480"
 USERNAME="mason"
+KEYMAP="uk"
+X11_LAYOUT="gb"
 CPU_VENDOR="intel"
 GPU_VENDOR="intel"
 ENABLE_T480=true
+ENABLE_SSH=true
 ENABLE_MULTILIB=true
 AUR_HELPER_PACKAGE="paru-bin"
 AUR_NONINTERACTIVE=true

@@ -26,6 +26,15 @@ fi
 locale-gen
 printf 'LANG=%s\n' "$LOCALE" > /etc/locale.conf
 printf 'KEYMAP=%s\n' "$KEYMAP" > /etc/vconsole.conf
+install -d -m 0755 /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/00-keyboard.conf <<EOF_X11_KEYBOARD
+Section "InputClass"
+    Identifier "system-keyboard"
+    MatchIsKeyboard "on"
+    Option "XkbLayout" "$X11_LAYOUT"
+EndSection
+EOF_X11_KEYBOARD
+chmod 0644 /etc/X11/xorg.conf.d/00-keyboard.conf
 
 printf '%s\n' "$HOSTNAME" > /etc/hostname
 cat > /etc/hosts <<EOF

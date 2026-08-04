@@ -14,6 +14,8 @@ validate_config runtime
 [[ $GPU_VENDOR == intel ]]
 [[ $DESKTOP == xfce ]]
 [[ $FILESYSTEM == btrfs ]]
+[[ $KEYMAP == uk ]]
+[[ $X11_LAYOUT == gb ]]
 [[ $AUR_HELPER_PACKAGE == paru-bin ]]
 bool_true "$ENABLE_SECURE_BOOT"
 bool_true "$AUTO_PREPARE_SECURE_BOOT"
@@ -21,6 +23,7 @@ bool_true "$REQUIRE_SETUP_MODE_AT_INSTALL"
 bool_true "$ENABLE_TPM"
 bool_true "$AUR_NONINTERACTIVE"
 bool_true "$PROVISION_NONINTERACTIVE"
+bool_true "$ENABLE_SSH"
 
 invalid=$(mktemp)
 trap 'rm -f "$invalid"' EXIT
@@ -53,5 +56,7 @@ expect_invalid "sed -i 's/^AUR_PACKAGES=.*/AUR_PACKAGES=\"--remove-all\"/' '$inv
   'Option-like AUR package token unexpectedly passed validation.'
 expect_invalid "sed -i 's/^ENABLE_SSH=.*/ENABLE_SSH=perhaps/' '$invalid'" \
   'Invalid boolean unexpectedly passed validation.'
+expect_invalid "sed -i 's/^X11_LAYOUT=.*/X11_LAYOUT=\"gb;evil\"/' '$invalid'" \
+  'Invalid X11 layout unexpectedly passed validation.'
 
 echo 'Configuration validation tests passed.'

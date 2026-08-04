@@ -96,7 +96,7 @@ Membership in the `docker` group is effectively root-equivalent because the daem
 
 ## SSH, TRIM, and snapshots
 
-- The OpenSSH client is installed; the server stays disabled unless `ENABLE_SSH=true`.
+- The OpenSSH server is enabled by default when `ENABLE_SSH=true`. Review `/etc/ssh/sshd_config` and firewall/network exposure before using it outside a trusted network.
 - Discard/TRIM through dm-crypt can reveal which encrypted blocks are unused. Set `ENABLE_SSD_TRIM=false` when that leakage matters more than SSD maintenance.
 - Btrfs/Snapper snapshots share the same disk and encryption boundary. They are rollback points, not backups.
 

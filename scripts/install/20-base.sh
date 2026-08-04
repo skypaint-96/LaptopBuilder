@@ -170,7 +170,7 @@ build_package_lists() {
 
   REQUIRED_OFFICIAL_PACKAGES=(
     "${BASE_INSTALL_PACKAGES[@]}"
-    bat btop fd fastfetch fzf jq less pacman-contrib ripgrep unzip wget zip
+    bat btop fd fastfetch fzf github-cli jq less pacman-contrib ripgrep unzip wget zip
     file-roller mousepad ristretto xdg-desktop-portal
     cmake dotnet-sdk ninja shellcheck
   )

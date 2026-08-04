@@ -8,6 +8,7 @@ set_config_defaults() {
   TIMEZONE="Europe/London"
   LOCALE="en_GB.UTF-8"
   KEYMAP="uk"
+  X11_LAYOUT="gb"
   CPU_VENDOR="intel"
   GPU_VENDOR="intel"
   KERNELS="linux linux-lts"
@@ -32,7 +33,7 @@ set_config_defaults() {
   INSTALL_POWERSHELL_MODULES=false
   INSTALL_VSCODE_EXTENSIONS=true
   ENABLE_BLUETOOTH=true
-  ENABLE_SSH=false
+  ENABLE_SSH=true
 
   ENABLE_SECURE_BOOT=true
   REQUIRE_SETUP_MODE_AT_INSTALL=true
@@ -103,6 +104,7 @@ validate_config() {
   [[ -e /usr/share/zoneinfo/$TIMEZONE ]] || die "Unknown TIMEZONE: $TIMEZONE"
   [[ $LOCALE == *UTF-8 ]] || die "LOCALE must be UTF-8."
   [[ $KEYMAP =~ ^[a-zA-Z0-9_-]+$ ]] || die "Invalid KEYMAP: $KEYMAP"
+  [[ $X11_LAYOUT =~ ^[a-zA-Z0-9_,+:-]+$ ]] || die "Invalid X11_LAYOUT: $X11_LAYOUT"
   [[ $CPU_VENDOR == intel || $CPU_VENDOR == amd ]] || die "CPU_VENDOR must be intel or amd."
   [[ $GPU_VENDOR == intel || $GPU_VENDOR == amd || $GPU_VENDOR == generic ]] || die "GPU_VENDOR must be intel, amd, or generic."
   if bool_true "$ENABLE_T480" && [[ $CPU_VENDOR != intel ]]; then
@@ -169,7 +171,7 @@ print_config_summary() {
   cat <<EOF
 Install target : $DISK
 Host/user      : $HOSTNAME / $USERNAME
-Locale         : $LOCALE, $TIMEZONE, keymap $KEYMAP
+Locale         : $LOCALE, $TIMEZONE, console $KEYMAP, X11 $X11_LAYOUT
 Hardware       : CPU $CPU_VENDOR, GPU $GPU_VENDOR
 Storage        : GPT, ${ESP_SIZE_MIB} MiB ESP, LUKS2, Btrfs
 Kernels        : $KERNELS

@@ -16,7 +16,8 @@ Usage: archctl [--config PATH] COMMAND [arguments]
 Commands:
   finish                Resume the complete first-boot workflow (recommended)
   status                Show the current first-boot/security stage
-  provision             Apply Ansible roles and user-level configuration
+  apply                 Apply desired system and user configuration
+  provision             Alias for apply
   secure-boot           Enrol owner keys and sign every EFI binary
   tpm-enroll            Enrol TPM2 unlock after Secure Boot is active
   tpm-remove            Remove TPM2 unlock and keep passphrase boot
@@ -26,8 +27,8 @@ Commands:
   update                Update official/AUR packages and signed boot assets
   help                  Show this help
 
-Commands that need root privilege elevate themselves. Run finish/provision as the
-configured normal user, not through sudo.
+Commands that need root privilege elevate themselves. Run finish/apply/provision as
+the configured normal user, not through sudo.
 EOF
 }
 
@@ -93,7 +94,7 @@ case "$COMMAND" in
   status|doctor)
     root_exec "$REPO_ROOT/scripts/security/status.sh" "$@"
     ;;
-  provision)
+  apply|provision)
     user_exec "$REPO_ROOT/scripts/provision.sh" "$@"
     ;;
   secure-boot)
