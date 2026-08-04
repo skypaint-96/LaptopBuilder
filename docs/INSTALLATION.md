@@ -163,7 +163,7 @@ The state machine can safely be rerun. Depending on detected state it will:
 - run all Ansible roles as root through the established sudo session;
 - build `paru` against the installed pacman/libalpm ABI after installing the explicit Rust provider;
 - install the explicit AUR allow-list without routine review prompts;
-- configure VS Code, PowerShell, OneDrive policy, and the first-login authentication launcher as the normal user;
+- configure VS Code, PowerShell, OneDrive policy/background bootstrap, and the first-login authentication launcher as the normal user;
 - rebuild/sign/verify all boot assets after package transactions;
 - consume staged LUKS/TPM credentials automatically when supplied by the USB, or prompt when unavailable;
 - enrol the TPM2 token and rebuild the signed UKIs;

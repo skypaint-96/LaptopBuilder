@@ -24,6 +24,11 @@ bool_true "$ENABLE_TPM"
 bool_true "$AUR_NONINTERACTIVE"
 bool_true "$PROVISION_NONINTERACTIVE"
 bool_true "$ENABLE_SSH"
+bool_true "$MANAGE_DEFAULT_APPLICATIONS"
+[[ $DEFAULT_BROWSER == edge ]]
+[[ $DEFAULT_FILE_MANAGER == thunar ]]
+[[ $DEFAULT_TERMINAL == xfce4-terminal ]]
+[[ $DEFAULT_MEDIA_PLAYER == mpv ]]
 bool_true "$ENABLE_ONEDRIVE"
 [[ $ONEDRIVE_SYNC_DIR == OneDrive ]]
 [[ $ONEDRIVE_LINK_DIRS == 'Documents Pictures Videos' ]]
@@ -64,5 +69,7 @@ expect_invalid "sed -i 's/^ENABLE_SSH=.*/ENABLE_SSH=perhaps/' '$invalid'" \
   'Invalid boolean unexpectedly passed validation.'
 expect_invalid "sed -i 's/^X11_LAYOUT=.*/X11_LAYOUT=\"gb;evil\"/' '$invalid'" \
   'Invalid X11 layout unexpectedly passed validation.'
+expect_invalid "sed -i 's/^DEFAULT_BROWSER=.*/DEFAULT_BROWSER=\"firefox\"/' '$invalid'" \
+  'Unsupported default browser unexpectedly passed validation.'
 
 echo 'Configuration validation tests passed.'

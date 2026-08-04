@@ -137,3 +137,5 @@ Disabled by default:
 posh-git
 Terminal-Icons
 ```
+
+- `mpv`: lightweight default audio/video player managed by the desktop role.

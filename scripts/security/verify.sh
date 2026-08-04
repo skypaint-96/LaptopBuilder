@@ -94,7 +94,7 @@ if bool_true "$ENABLE_TPM"; then
   run_check "Temporary TPM enrollment credentials have been removed" pending_credentials_removed
 fi
 
-for package in git vim dotnet-sdk gnome-keyring; do
+for package in git vim dotnet-sdk gnome-keyring libnotify; do
   check_package "$package"
 done
 
@@ -108,17 +108,23 @@ fi
 
 check_package github-cli
 if bool_true "$ENABLE_ONEDRIVE"; then
-  check_package onedrive-abraunegg
   run_check "Managed OneDrive configuration exists" test -r "/home/$USERNAME/.config/onedrive/config"
+  run_check "OneDrive background bootstrap helper is installed" test -x /usr/local/bin/arch-workstation-onedrive-bootstrap
+  run_check "OneDrive background bootstrap user service is installed" test -r /usr/lib/systemd/user/arch-workstation-onedrive-bootstrap.service
   if [[ -s /home/$USERNAME/.config/onedrive/refresh_token ]]; then
     check_ok "OneDrive authentication material exists for $USERNAME"
+    if [[ -s /home/$USERNAME/.local/state/arch-workstation/onedrive/bootstrap-complete ]]; then
+      check_ok "OneDrive initial background synchronisation completed"
+    else
+      check_warn "OneDrive is authenticated but its initial background synchronisation is pending or running."
+    fi
     read -r -a onedrive_links <<< "$ONEDRIVE_LINK_DIRS"
     for directory in "${onedrive_links[@]}"; do
       if [[ -L /home/$USERNAME/$directory \
         && $(readlink -f -- "/home/$USERNAME/$directory") == $(readlink -m -- "/home/$USERNAME/$ONEDRIVE_SYNC_DIR/$directory") ]]; then
         check_ok "$directory links into OneDrive"
       else
-        check_warn "$directory is not yet linked into OneDrive; run 'archctl auth onedrive' after reviewing the initial sync."
+        check_warn "$directory is not yet linked into OneDrive; inspect 'archctl auth onedrive-status'."
       fi
     done
   else
@@ -130,6 +136,22 @@ if bool_true "$ENABLE_FIRST_LOGIN_AUTH"; then
 fi
 run_check "Console keyboard layout matches configuration" grep -qxF "KEYMAP=$KEYMAP" /etc/vconsole.conf
 run_check "X11 keyboard layout matches configuration" grep -Eq "Option[[:space:]]+\"XkbLayout\"[[:space:]]+\"$X11_LAYOUT\"" /etc/X11/xorg.conf.d/00-keyboard.conf
+
+if bool_true "$MANAGE_DEFAULT_APPLICATIONS"; then
+  user_home="/home/$USERNAME"
+  check_package mpv
+  run_check "Managed MIME application defaults exist" test -r "$user_home/.config/mimeapps.list"
+  run_check "Microsoft Edge is the default web browser" grep -qxF 'x-scheme-handler/https=edge.desktop;' "$user_home/.config/mimeapps.list"
+  run_check "Microsoft Edge is the default PDF viewer" grep -qxF 'application/pdf=edge.desktop;' "$user_home/.config/mimeapps.list"
+  run_check "Thunar is the default file manager" grep -qxF 'inode/directory=thunar.desktop;' "$user_home/.config/mimeapps.list"
+  run_check "Mousepad is the default plain-text editor" grep -qxF 'text/plain=org.xfce.mousepad.desktop;' "$user_home/.config/mimeapps.list"
+  run_check "Ristretto is the default image viewer" grep -qxF 'image/png=org.xfce.ristretto.desktop;' "$user_home/.config/mimeapps.list"
+  run_check "File Roller is the default archive manager" grep -qxF 'application/zip=org.gnome.FileRoller.desktop;' "$user_home/.config/mimeapps.list"
+  run_check "mpv is the default media player" grep -qxF 'video/mp4=mpv.desktop;' "$user_home/.config/mimeapps.list"
+  run_check "Xfce preferred browser is Microsoft Edge" grep -qxF 'WebBrowser=arch-workstation-edge' "$user_home/.config/xfce4/helpers.rc"
+  run_check "Xfce preferred file manager is Thunar" grep -qxF 'FileManager=Thunar' "$user_home/.config/xfce4/helpers.rc"
+  run_check "Xfce preferred terminal is xfce4-terminal" grep -qxF 'TerminalEmulator=xfce4-terminal' "$user_home/.config/xfce4/helpers.rc"
+fi
 
 if bool_true "$ENABLE_DOCKER"; then
   for package in docker docker-buildx docker-compose; do

@@ -157,6 +157,10 @@ The installed repository also exposes `arch-workstation-build-usb` as a symlink 
 - Docker-group membership is root-equivalent.
 - Firmware key changes, TPM clearing, or motherboard replacement can require the retained LUKS passphrase.
 
-After `archctl finish`, the next graphical login offers supported application sign-ins. OneDrive authentication performs a dry run and initial sync before safely linking `Documents`, `Pictures`, and `Videos`; existing local folders are retained in dated backups.
+After `archctl finish`, the next graphical login offers supported application sign-ins. Edge is prepared before browser OAuth. OneDrive authentication returns promptly after queuing a background user service for the dry run, initial sync, safe `Documents`/`Pictures`/`Videos` linking, and continuous monitoring; existing local folders are retained in dated backups.
 
 Read [docs/USB.md](docs/USB.md), [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md), [docs/SECURITY.md](docs/SECURITY.md), and [docs/RECOVERY.md](docs/RECOVERY.md) before relying on the installation for important data.
+
+## Default applications
+
+`archctl apply` manages Xfce preferred applications and common XDG MIME associations. Microsoft Edge is the browser, mail-link, HTML, and PDF handler. Thunar, Xfce Terminal, Mousepad, VS Code, Ristretto, File Roller, and mpv handle directories, terminal launches, plain text, source/config files, images, archives, and audio/video.

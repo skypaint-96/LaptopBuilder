@@ -10,7 +10,7 @@ required=(
   usb/build.sh usb/cache.sh usb/configure.sh usb/secrets.sh
   usb/API_VERSION usb/lib/common.sh usb/live/archws-live
   scripts/finish.sh scripts/provision.sh scripts/install-aur.sh scripts/update.sh
-  scripts/auth.sh scripts/first-login-auth.sh
+  scripts/auth.sh scripts/first-login-auth.sh scripts/onedrive-bootstrap.sh scripts/lib/onedrive.sh
   scripts/install/01-preflight.sh
   scripts/install/10-disk.sh
   scripts/install/20-base.sh
@@ -36,6 +36,12 @@ required=(
   tests/test-auth.sh
   ansible/site.yml
   ansible/roles/cloud/tasks/main.yml ansible/roles/cloud/templates/onedrive-config.j2
+  ansible/roles/cloud/templates/arch-workstation-onedrive-bootstrap.service.j2
+  ansible/roles/desktop/templates/mimeapps.list.j2
+  ansible/roles/desktop/templates/helpers.rc.j2
+  ansible/roles/desktop/templates/edge.desktop.j2
+  ansible/roles/desktop/templates/arch-workstation-edge.desktop.j2
+  ansible/roles/desktop/templates/arch-workstation-edge-mail.desktop.j2
   docs/INSTALLATION.md docs/ARCHITECTURE.md docs/SECURITY.md docs/RECOVERY.md
   docs/CUSTOMISING.md docs/PACKAGES.md docs/REFERENCES.md docs/TESTING.md
   docs/MIGRATION.md docs/USB.md docs/AUTHENTICATION.md
@@ -74,7 +80,12 @@ grep -q 'AUTO_PREPARE_SECURE_BOOT=true' config/install.conf.example
 grep -q 'AUR_HELPER_PACKAGE="paru"' config/install.conf.example
 grep -q 'X11_LAYOUT="gb"' config/install.conf.example
 grep -q 'ENABLE_SSH=true' config/install.conf.example
+grep -q 'MANAGE_DEFAULT_APPLICATIONS=true' config/install.conf.example
+grep -q 'DEFAULT_BROWSER="edge"' config/install.conf.example
 grep -q 'github-cli' ansible/roles/common/tasks/main.yml
+grep -q 'mpv' ansible/roles/desktop/tasks/main.yml
+grep -q 'x-scheme-handler/https=edge.desktop;' ansible/roles/desktop/templates/mimeapps.list.j2
+grep -q 'WebBrowser=arch-workstation-edge' ansible/roles/desktop/templates/helpers.rc.j2
 grep -q 'Option "XkbLayout"' ansible/roles/common/tasks/main.yml
 grep -q 'Apply the OpenSSH server policy' ansible/roles/common/tasks/main.yml
 grep -q 'apply|provision' archctl
@@ -82,8 +93,14 @@ grep -q 'auth)' archctl
 grep -q 'onedrive-abraunegg' config/install.conf.example
 grep -q 'ONEDRIVE_LINK_DIRS="Documents Pictures Videos"' config/install.conf.example
 grep -q 'arch-workstation-auth.desktop' ansible/roles/cloud/tasks/main.yml
-grep -q 'rsync -a --ignore-existing' scripts/auth.sh
-grep -q 'refresh_token' scripts/auth.sh
+grep -q 'arch-workstation-onedrive-bootstrap.service' ansible/roles/cloud/tasks/main.yml
+grep -q 'ONEDRIVE_INITIAL_SYNC_BACKGROUND=true' config/install.conf.example
+grep -q 'EDGE_PREPARE_BEFORE_OAUTH=true' config/install.conf.example
+grep -q 'systemctl --user start --no-block' scripts/auth.sh
+grep -q 'onedrive --sync --verbose --dry-run' scripts/onedrive-bootstrap.sh
+grep -q 'libnotify' ansible/roles/desktop/tasks/main.yml
+grep -q 'rsync -a --ignore-existing' scripts/lib/onedrive.sh
+grep -q 'refresh_token' scripts/lib/onedrive.sh
 grep -q 'paru-bin-debug' scripts/install-aur.sh
 grep -q -- '--skipreview' scripts/install-aur.sh
 grep -q 'sudo env ANSIBLE_CONFIG=' scripts/provision.sh

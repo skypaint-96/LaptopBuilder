@@ -16,8 +16,9 @@ archctl auth --first-login
 
 The wizard supports:
 
+- Microsoft Edge first-run preparation before any browser OAuth link is opened;
 - GitHub CLI browser authentication and Git credential-helper setup;
-- OneDrive browser OAuth, dry-run, initial sync, safe folder linking, and user service enablement;
+- OneDrive browser OAuth followed by a background dry-run, initial sync, safe folder linking, and user service enablement;
 - opening Visual Studio Code for Settings Sync sign-in;
 - opening Microsoft Edge for profile sync sign-in;
 - opening Steam for account sign-in.
@@ -37,6 +38,8 @@ Run or inspect authentication at any time:
 archctl auth
 archctl auth github
 archctl auth onedrive
+archctl auth onedrive-status
+archctl auth onedrive-logs
 archctl auth status
 ```
 
@@ -60,12 +63,30 @@ Its refresh token remains in the user's private OneDrive configuration directory
 and is not copied into the project, USB cache, snapshots of the project, or build
 artifacts.
 
-The background service is not enabled until authentication and an initial sync
-succeed. It is then enabled as the normal user's service:
+The normal continuous-monitor service is not enabled until authentication and the
+initial transaction succeed. After OAuth, `archctl auth onedrive` queues the
+one-shot user service and returns control to the terminal:
+
+```bash
+systemctl --user start --no-block arch-workstation-onedrive-bootstrap.service
+```
+
+That service performs the dry run, initial synchronisation, safe folder migration,
+a second upload sync, and finally enables the normal monitor service:
 
 ```bash
 systemctl --user enable --now onedrive.service
 ```
+
+Monitor it without keeping the authentication terminal occupied:
+
+```bash
+archctl auth onedrive-status
+archctl auth onedrive-logs
+```
+
+A best-effort desktop notification reports completion or failure. The journal is
+the authoritative log.
 
 ## Safe home-folder linking
 
@@ -103,6 +124,8 @@ ONEDRIVE_SKIP_DOTFILES=true
 ONEDRIVE_SKIP_SYMLINKS=true
 ONEDRIVE_USE_RECYCLE_BIN=true
 ONEDRIVE_ENABLE_SERVICE=true
+ONEDRIVE_INITIAL_SYNC_BACKGROUND=true
+ONEDRIVE_NOTIFY_ON_COMPLETION=true
 
 ENABLE_FIRST_LOGIN_AUTH=true
 AUTH_GITHUB_CLI=true
@@ -111,6 +134,7 @@ AUTH_ONEDRIVE=true
 AUTH_VSCODE=true
 AUTH_EDGE=true
 AUTH_STEAM=true
+EDGE_PREPARE_BEFORE_OAUTH=true
 ```
 
 `ONEDRIVE_SYNC_DIR` is deliberately restricted to a path relative to the user's

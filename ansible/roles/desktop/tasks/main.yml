@@ -8,7 +8,9 @@
       - --noconfirm
       - file-roller
       - gnome-keyring
+      - libnotify
       - mousepad
+      - mpv
       - polkit-gnome
       - ristretto
       - xdg-desktop-portal
@@ -20,3 +22,68 @@
   ansible.builtin.systemd_service:
     name: lightdm.service
     enabled: true
+
+- name: Ensure user default-application directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0755'
+  loop:
+    - "/home/{{ arch_user }}/.config"
+    - "/home/{{ arch_user }}/.config/xfce4"
+    - "/home/{{ arch_user }}/.local/share/applications"
+    - "/home/{{ arch_user }}/.local/share/xfce4/helpers"
+  when: manage_default_applications | bool
+
+- name: Install corrected Microsoft Edge desktop entry
+  ansible.builtin.template:
+    src: edge.desktop.j2
+    dest: "/home/{{ arch_user }}/.local/share/applications/edge.desktop"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0644'
+  when: manage_default_applications | bool
+
+- name: Install Xfce Microsoft Edge helper definitions
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/home/{{ arch_user }}/.local/share/xfce4/helpers/{{ item }}"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0644'
+  loop:
+    - arch-workstation-edge.desktop
+    - arch-workstation-edge-mail.desktop
+  when: manage_default_applications | bool
+
+- name: Configure Xfce preferred applications
+  ansible.builtin.template:
+    src: helpers.rc.j2
+    dest: "/home/{{ arch_user }}/.config/xfce4/helpers.rc"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0644'
+  when: manage_default_applications | bool
+
+- name: Configure common XDG MIME application defaults
+  ansible.builtin.template:
+    src: mimeapps.list.j2
+    dest: "/home/{{ arch_user }}/.config/mimeapps.list"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0644'
+  when: manage_default_applications | bool
+
+- name: Remove managed default-application files when disabled
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/home/{{ arch_user }}/.local/share/applications/edge.desktop"
+    - "/home/{{ arch_user }}/.local/share/xfce4/helpers/arch-workstation-edge.desktop"
+    - "/home/{{ arch_user }}/.local/share/xfce4/helpers/arch-workstation-edge-mail.desktop"
+    - "/home/{{ arch_user }}/.config/xfce4/helpers.rc"
+    - "/home/{{ arch_user }}/.config/mimeapps.list"
+  when: not (manage_default_applications | bool)

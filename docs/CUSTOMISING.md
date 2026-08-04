@@ -139,6 +139,8 @@ The configuration script installs missing modules for the current user only.
 
 ## Authentication and OneDrive
 
+OneDrive initial synchronisation runs as a user service when `ONEDRIVE_INITIAL_SYNC_BACKGROUND=true`; Edge first-run preparation is controlled by `EDGE_PREPARE_BEFORE_OAUTH=true`.
+
 Application sessions are deliberately not stored in Git or the installer USB. The one-time graphical wizard is configured through the `AUTH_*` switches and can be rerun with `archctl auth`. See [AUTHENTICATION.md](AUTHENTICATION.md) for the safe OneDrive initial-sync and folder-link workflow.
 
 ## VS Code
@@ -152,3 +154,7 @@ Version 0.2 supports Xfce on X11 only. Replacing it is more than a package-list 
 ## Storage changes
 
 The disk and filesystem scripts are intentionally narrow. Adding dual boot, a separate `/home` partition, RAID, LVM, hibernation, or non-Btrfs filesystems requires explicit migration and recovery design. Do not simply weaken validation and assume the existing mount, boot, snapshot, and crypttab logic remains correct.
+
+## Default applications
+
+The default application policy is controlled by `MANAGE_DEFAULT_APPLICATIONS` and the `DEFAULT_*` values in `install.conf`. Version 0.3.7 supports the explicit Edge/Thunar/Xfce Terminal/Mousepad/VS Code/Ristretto/File Roller/mpv profile. Apply changes with `archctl apply --skip-upgrade`. The generated user files are `~/.config/mimeapps.list`, `~/.config/xfce4/helpers.rc`, and matching Xfce/Edge helper entries under `~/.local/share`.

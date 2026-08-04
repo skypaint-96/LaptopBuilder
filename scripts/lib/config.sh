@@ -35,6 +35,18 @@ set_config_defaults() {
   ENABLE_BLUETOOTH=true
   ENABLE_SSH=true
 
+  MANAGE_DEFAULT_APPLICATIONS=true
+  DEFAULT_BROWSER="edge"
+  DEFAULT_MAIL_HANDLER="edge"
+  DEFAULT_FILE_MANAGER="thunar"
+  DEFAULT_TERMINAL="xfce4-terminal"
+  DEFAULT_TEXT_EDITOR="mousepad"
+  DEFAULT_CODE_EDITOR="vscode"
+  DEFAULT_IMAGE_VIEWER="ristretto"
+  DEFAULT_ARCHIVE_MANAGER="file-roller"
+  DEFAULT_MEDIA_PLAYER="mpv"
+  DEFAULT_PDF_VIEWER="edge"
+
   ENABLE_ONEDRIVE=true
   ONEDRIVE_SYNC_DIR="OneDrive"
   ONEDRIVE_LINK_DIRS="Documents Pictures Videos"
@@ -42,6 +54,8 @@ set_config_defaults() {
   ONEDRIVE_SKIP_SYMLINKS=true
   ONEDRIVE_USE_RECYCLE_BIN=true
   ONEDRIVE_ENABLE_SERVICE=true
+  ONEDRIVE_INITIAL_SYNC_BACKGROUND=true
+  ONEDRIVE_NOTIFY_ON_COMPLETION=true
 
   ENABLE_FIRST_LOGIN_AUTH=true
   AUTH_GITHUB_CLI=true
@@ -50,6 +64,7 @@ set_config_defaults() {
   AUTH_VSCODE=true
   AUTH_EDGE=true
   AUTH_STEAM=true
+  EDGE_PREPARE_BEFORE_OAUTH=true
 
   ENABLE_SECURE_BOOT=true
   REQUIRE_SETUP_MODE_AT_INSTALL=true
@@ -161,6 +176,16 @@ validate_config() {
   validate_simple_name_list ONEDRIVE_LINK_DIRS
   [[ $GITHUB_GIT_PROTOCOL == https || $GITHUB_GIT_PROTOCOL == ssh ]] \
     || die "GITHUB_GIT_PROTOCOL must be https or ssh."
+  [[ $DEFAULT_BROWSER == edge ]] || die "DEFAULT_BROWSER currently supports only edge."
+  [[ $DEFAULT_MAIL_HANDLER == edge ]] || die "DEFAULT_MAIL_HANDLER currently supports only edge."
+  [[ $DEFAULT_FILE_MANAGER == thunar ]] || die "DEFAULT_FILE_MANAGER currently supports only thunar."
+  [[ $DEFAULT_TERMINAL == xfce4-terminal ]] || die "DEFAULT_TERMINAL currently supports only xfce4-terminal."
+  [[ $DEFAULT_TEXT_EDITOR == mousepad ]] || die "DEFAULT_TEXT_EDITOR currently supports only mousepad."
+  [[ $DEFAULT_CODE_EDITOR == vscode ]] || die "DEFAULT_CODE_EDITOR currently supports only vscode."
+  [[ $DEFAULT_IMAGE_VIEWER == ristretto ]] || die "DEFAULT_IMAGE_VIEWER currently supports only ristretto."
+  [[ $DEFAULT_ARCHIVE_MANAGER == file-roller ]] || die "DEFAULT_ARCHIVE_MANAGER currently supports only file-roller."
+  [[ $DEFAULT_MEDIA_PLAYER == mpv ]] || die "DEFAULT_MEDIA_PLAYER currently supports only mpv."
+  [[ $DEFAULT_PDF_VIEWER == edge ]] || die "DEFAULT_PDF_VIEWER currently supports only edge."
   [[ $TPM_PCRS =~ ^[0-9]+([+][0-9]+)*$ ]] || die "TPM_PCRS must look like 7 or 7+11."
   [[ $TPM_PIN_MIN_LENGTH =~ ^[0-9]+$ ]] || die "TPM_PIN_MIN_LENGTH must be an integer."
   ((TPM_PIN_MIN_LENGTH >= 4 && TPM_PIN_MIN_LENGTH <= 64)) || die "TPM_PIN_MIN_LENGTH must be between 4 and 64."
@@ -173,9 +198,11 @@ validate_config() {
     ENABLE_MULTILIB ENABLE_SSD_TRIM ENABLE_AUR AUR_NONINTERACTIVE PROVISION_NONINTERACTIVE \
     ENABLE_DOCKER DOCKER_ADD_USER_TO_GROUP ENABLE_GAMING ENABLE_SNAPSHOTS ENABLE_T480 \
     ENABLE_POWERSHELL_PROFILE INSTALL_POWERSHELL_MODULES INSTALL_VSCODE_EXTENSIONS \
-    ENABLE_BLUETOOTH ENABLE_SSH ENABLE_ONEDRIVE ONEDRIVE_SKIP_DOTFILES \
+    ENABLE_BLUETOOTH ENABLE_SSH MANAGE_DEFAULT_APPLICATIONS ENABLE_ONEDRIVE ONEDRIVE_SKIP_DOTFILES \
     ONEDRIVE_SKIP_SYMLINKS ONEDRIVE_USE_RECYCLE_BIN ONEDRIVE_ENABLE_SERVICE \
+    ONEDRIVE_INITIAL_SYNC_BACKGROUND ONEDRIVE_NOTIFY_ON_COMPLETION \
     ENABLE_FIRST_LOGIN_AUTH AUTH_GITHUB_CLI AUTH_ONEDRIVE AUTH_VSCODE AUTH_EDGE AUTH_STEAM \
+    EDGE_PREPARE_BEFORE_OAUTH \
     ENABLE_SECURE_BOOT REQUIRE_SETUP_MODE_AT_INSTALL \
     AUTO_PREPARE_SECURE_BOOT SBCTL_ENROLL_MICROSOFT ENABLE_TPM REQUIRE_TPM TPM_WITH_PIN \
     TPM_PIN_NUMERIC_ONLY STAGE_TPM_CREDENTIALS T480_BATTERY_THRESHOLDS \
@@ -207,6 +234,15 @@ validate_config() {
   if bool_true "$STAGE_TPM_CREDENTIALS" && ! bool_true "$ENABLE_TPM"; then
     die "STAGE_TPM_CREDENTIALS=true requires ENABLE_TPM=true."
   fi
+  if bool_true "$MANAGE_DEFAULT_APPLICATIONS" && ! bool_true "$ENABLE_AUR"; then
+    die "MANAGE_DEFAULT_APPLICATIONS=true requires ENABLE_AUR=true for Microsoft Edge and VS Code."
+  fi
+  if bool_true "$MANAGE_DEFAULT_APPLICATIONS" && [[ " $AUR_PACKAGES " != *" microsoft-edge-stable-bin "* ]]; then
+    die "MANAGE_DEFAULT_APPLICATIONS=true requires microsoft-edge-stable-bin in AUR_PACKAGES."
+  fi
+  if bool_true "$MANAGE_DEFAULT_APPLICATIONS" && [[ " $AUR_PACKAGES " != *" visual-studio-code-bin "* ]]; then
+    die "MANAGE_DEFAULT_APPLICATIONS=true requires visual-studio-code-bin in AUR_PACKAGES."
+  fi
   if bool_true "$ENABLE_ONEDRIVE" && ! bool_true "$ENABLE_AUR"; then
     die "ENABLE_ONEDRIVE=true requires ENABLE_AUR=true for onedrive-abraunegg."
   fi
@@ -237,7 +273,8 @@ SSD TRIM       : $ENABLE_SSD_TRIM
 Docker/gaming  : $ENABLE_DOCKER / $ENABLE_GAMING
 AUR bootstrap  : $AUR_HELPER_PACKAGE (non-interactive: $AUR_NONINTERACTIVE)
 SSH server     : $ENABLE_SSH
-OneDrive       : $ENABLE_ONEDRIVE ($ONEDRIVE_SYNC_DIR; links: $ONEDRIVE_LINK_DIRS)
-First-login auth: $ENABLE_FIRST_LOGIN_AUTH (GitHub: $AUTH_GITHUB_CLI, OneDrive: $AUTH_ONEDRIVE, VS Code: $AUTH_VSCODE, Edge: $AUTH_EDGE, Steam: $AUTH_STEAM)
+Default apps   : $MANAGE_DEFAULT_APPLICATIONS (browser/PDF: $DEFAULT_BROWSER/$DEFAULT_PDF_VIEWER, files: $DEFAULT_FILE_MANAGER, media: $DEFAULT_MEDIA_PLAYER)
+OneDrive       : $ENABLE_ONEDRIVE ($ONEDRIVE_SYNC_DIR; links: $ONEDRIVE_LINK_DIRS; background initial sync: $ONEDRIVE_INITIAL_SYNC_BACKGROUND)
+First-login auth: $ENABLE_FIRST_LOGIN_AUTH (Edge prep: $EDGE_PREPARE_BEFORE_OAUTH; GitHub: $AUTH_GITHUB_CLI, OneDrive: $AUTH_ONEDRIVE, VS Code: $AUTH_VSCODE, Edge: $AUTH_EDGE, Steam: $AUTH_STEAM)
 EOF
 }

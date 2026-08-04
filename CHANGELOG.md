@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.8 - 2026-08-04
+
+### Added
+
+- Prepare Microsoft Edge before GitHub or OneDrive OAuth so Edge first-run screens cannot interrupt browser authentication.
+- Add a one-shot `arch-workstation-onedrive-bootstrap.service` user unit for the OneDrive dry run, initial sync, folder migration, and continuous-service enablement.
+- Add `archctl auth onedrive-status` and `archctl auth onedrive-logs` for monitoring the background bootstrap.
+- Install `libnotify` and send best-effort desktop notifications when OneDrive bootstrap succeeds or fails.
+
+### Changed
+
+- Return control to the authentication wizard immediately after OneDrive OAuth and background-service queueing.
+- Keep the normal `onedrive.service` stopped until the initial transaction and `Documents`/`Pictures`/`Videos` links complete successfully.
+- Share OneDrive state and safe folder-linking logic between interactive authentication and the background service.
+
+## 0.3.7 - 2026-08-04
+
+### Added
+
+- Manage Xfce preferred applications and common XDG MIME associations as repeatable desired state.
+- Set Microsoft Edge as the default web, mail-link, HTML, and PDF handler.
+- Set Thunar for directories, Xfce Terminal for terminal launches, Mousepad for plain text, VS Code for common source/config formats, Ristretto for images, File Roller for archives, and mpv for audio/video.
+- Add a corrected user-local `edge.desktop` entry that passes opened URLs and files to Microsoft Edge.
+
+### Changed
+
+- Install lightweight `mpv` as the default media player and include it in the persistent offline package cache.
+- Extend `archctl verify` to audit the managed preferred applications and MIME defaults.
+- Remove the duplicate OneDrive package result from verification output.
+
 ## 0.3.6 - 2026-08-04
 
 ### Added

@@ -50,6 +50,20 @@ ENABLE_BLUETOOTH=true
 # Install and enable the OpenSSH server by default. Review sshd_config before exposing it beyond a trusted network.
 ENABLE_SSH=true
 
+# Manage Xfce preferred applications and common XDG MIME associations.
+# The current supported application set is intentionally explicit and validated.
+MANAGE_DEFAULT_APPLICATIONS=true
+DEFAULT_BROWSER="edge"
+DEFAULT_MAIL_HANDLER="edge"
+DEFAULT_FILE_MANAGER="thunar"
+DEFAULT_TERMINAL="xfce4-terminal"
+DEFAULT_TEXT_EDITOR="mousepad"
+DEFAULT_CODE_EDITOR="vscode"
+DEFAULT_IMAGE_VIEWER="ristretto"
+DEFAULT_ARCHIVE_MANAGER="file-roller"
+DEFAULT_MEDIA_PLAYER="mpv"
+DEFAULT_PDF_VIEWER="edge"
+
 # Cloud sync and first-login authentication. Tokens remain in each application's
 # normal per-user credential store and are never copied into Git or the USB.
 ENABLE_ONEDRIVE=true
@@ -62,6 +76,10 @@ ONEDRIVE_SKIP_DOTFILES=true
 ONEDRIVE_SKIP_SYMLINKS=true
 ONEDRIVE_USE_RECYCLE_BIN=true
 ONEDRIVE_ENABLE_SERVICE=true
+# Keep the interactive OAuth step in the foreground, then queue the potentially
+# long dry-run, initial sync, folder migration, and service enablement in systemd.
+ONEDRIVE_INITIAL_SYNC_BACKGROUND=true
+ONEDRIVE_NOTIFY_ON_COMPLETION=true
 
 # Start a one-time wizard after the first graphical login. The wizard checks each
 # provider first and only asks for authentication when no valid session is found.
@@ -72,6 +90,9 @@ AUTH_ONEDRIVE=true
 AUTH_VSCODE=true
 AUTH_EDGE=true
 AUTH_STEAM=true
+# Open Edge first and wait for its welcome/privacy screens to be completed before
+# GitHub or Microsoft OAuth is allowed to launch the default browser.
+EDGE_PREPARE_BEFORE_OAUTH=true
 
 ENABLE_SECURE_BOOT=true
 # Requiring Setup Mode before disk changes lets the installer enrol owner keys

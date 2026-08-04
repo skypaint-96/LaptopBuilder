@@ -7,30 +7,45 @@ CONFIG_FILE="${ARCH_WORKSTATION_CONFIG:-/etc/arch-installer/install.conf}"
 source "$REPO_ROOT/scripts/lib/common.sh"
 # shellcheck source=lib/config.sh
 source "$REPO_ROOT/scripts/lib/config.sh"
+# shellcheck source=lib/onedrive.sh
+source "$REPO_ROOT/scripts/lib/onedrive.sh"
 
 TARGET=all
 FIRST_LOGIN=false
 ASSUME_YES=false
+EDGE_PREPARE_ATTEMPTED=false
 
 usage() {
   cat <<'USAGE'
-Usage: archctl auth [all|github|onedrive|vscode|edge|steam|status|reset] [options]
+Usage: archctl auth [TARGET] [options]
 
-Runs supported interactive login flows without storing credentials in the project.
+Targets:
+  all               Run all enabled authentication flows (default)
+  github            Authenticate GitHub CLI
+  onedrive          Authenticate OneDrive and start its initial background sync
+  onedrive-status   Show OneDrive bootstrap/service state
+  onedrive-logs     Follow the OneDrive initial-sync journal
+  vscode            Open Visual Studio Code Settings Sync
+  edge              Prepare Edge and open profile-sync settings
+  steam             Open Steam sign-in
+  status            Summarise all supported authentication state
+  reset             Reset local wizard completion markers only
 
 Options:
-  --first-login   Run as the one-time graphical-login wizard
-  --yes           Accept supported non-destructive prompts
-  -h, --help      Show this help
+  --first-login     Run as the one-time graphical-login wizard
+  --yes             Accept supported non-destructive prompts
+  -h, --help        Show this help
 
-Folder linking for OneDrive occurs only after authentication and a successful
-initial sync. Existing local folders are retained in a dated backup directory.
+Edge is prepared before browser-based OAuth so its first-run screens do not
+interrupt GitHub or OneDrive authentication. OneDrive authentication remains
+interactive, but the dry run, initial sync, folder migration, and service setup
+run in a background user service.
 USAGE
 }
 
 while (($#)); do
   case "$1" in
-    all|github|onedrive|vscode|edge|steam|status|reset)
+    all|github|onedrive|onedrive-status|onedrive-logs|vscode|edge|steam|status|reset)
       TARGET=$1
       shift
       ;;
@@ -61,9 +76,10 @@ validate_config runtime
 AUTH_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/arch-workstation/auth"
 AUTH_COMPLETE_MARKER="$AUTH_STATE_DIR/first-login-complete"
 GUI_MARKER_DIR="$AUTH_STATE_DIR/gui"
-BACKUP_ROOT_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/arch-workstation/folder-backups"
-mkdir -p "$AUTH_STATE_DIR" "$GUI_MARKER_DIR" "$BACKUP_ROOT_BASE"
-chmod 0700 "$AUTH_STATE_DIR" "$GUI_MARKER_DIR" "$BACKUP_ROOT_BASE"
+EDGE_READY_MARKER="$AUTH_STATE_DIR/edge-first-run-complete"
+mkdir -p "$AUTH_STATE_DIR" "$GUI_MARKER_DIR"
+chmod 0700 "$AUTH_STATE_DIR" "$GUI_MARKER_DIR"
+initialise_onedrive_state
 
 if bool_true "$FIRST_LOGIN" && [[ -f $AUTH_COMPLETE_MARKER ]]; then
   exit 0
@@ -81,22 +97,6 @@ github_authenticated() {
   command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1
 }
 
-onedrive_authenticated() {
-  [[ -s $HOME/.config/onedrive/refresh_token ]]
-}
-
-onedrive_links_ready() {
-  local sync_root="$HOME/$ONEDRIVE_SYNC_DIR" name source target
-  local -a names
-  read -r -a names <<< "$ONEDRIVE_LINK_DIRS"
-  for name in "${names[@]}"; do
-    source="$HOME/$name"
-    target="$sync_root/$name"
-    [[ -L $source ]] || return 1
-    [[ $(readlink -f -- "$source") == $(readlink -m -- "$target") ]] || return 1
-  done
-}
-
 mark_gui_authenticated() {
   local provider=$1
   printf '%s\n' "$(date --iso-8601=seconds)" > "$GUI_MARKER_DIR/$provider"
@@ -105,6 +105,59 @@ mark_gui_authenticated() {
 
 gui_authenticated() {
   [[ -f $GUI_MARKER_DIR/$1 ]]
+}
+
+prepare_edge_for_oauth() {
+  bool_true "$EDGE_PREPARE_BEFORE_OAUTH" || return 0
+  [[ -f $EDGE_READY_MARKER ]] && return 0
+  bool_true "$EDGE_PREPARE_ATTEMPTED" && return 1
+  EDGE_PREPARE_ATTEMPTED=true
+  command -v microsoft-edge-stable >/dev/null 2>&1 || {
+    warn 'Microsoft Edge is not installed, so browser OAuth preparation was skipped.'
+    return 1
+  }
+
+  ask 'Open Microsoft Edge now to complete its first-run screens before browser authentication?' yes || return 1
+  setsid -f microsoft-edge-stable --new-window edge://newtab >/dev/null 2>&1 \
+    || { warn 'Could not launch Microsoft Edge.'; return 1; }
+  cat <<'EOF_EDGE'
+
+Complete the Microsoft Edge welcome/privacy/default-browser screens first.
+You may also sign in to the Edge profile now, but that is optional at this stage.
+Return to this terminal after Edge is ready to open normal web links.
+EOF_EDGE
+  read -r -p 'Press Enter when the Edge first-run screens are complete... ' _
+  ask 'Mark Microsoft Edge as ready for OAuth links?' yes || return 1
+  printf '%s\n' "$(date --iso-8601=seconds)" > "$EDGE_READY_MARKER"
+  chmod 0600 "$EDGE_READY_MARKER"
+  success 'Microsoft Edge first-run preparation was recorded locally.'
+}
+
+print_onedrive_background_status() {
+  if onedrive_bootstrap_complete; then
+    printf '[ OK ] OneDrive initial synchronisation and folder linking are complete.\n'
+  elif onedrive_bootstrap_active; then
+    printf '[ .. ] OneDrive initial synchronisation is running in the background.\n'
+  elif onedrive_bootstrap_failed; then
+    printf '[FAIL] OneDrive initial synchronisation needs attention.\n'
+  elif onedrive_authenticated; then
+    printf '[ .. ] OneDrive is authenticated but initial synchronisation has not started.\n'
+  else
+    printf '[ .. ] OneDrive is not authenticated.\n'
+  fi
+
+  if systemctl --user list-unit-files "$ONEDRIVE_BOOTSTRAP_UNIT" --no-legend 2>/dev/null | grep -q .; then
+    systemctl --user --no-pager --full status "$ONEDRIVE_BOOTSTRAP_UNIT" 2>/dev/null || true
+  else
+    printf '[FAIL] OneDrive bootstrap user service is not installed; run archctl apply.\n'
+    return 1
+  fi
+}
+
+follow_onedrive_logs() {
+  command -v journalctl >/dev/null 2>&1 || die 'journalctl is unavailable.'
+  echo 'Following OneDrive initial-sync logs. Press Ctrl+C to stop viewing.'
+  exec journalctl --user -u "$ONEDRIVE_BOOTSTRAP_UNIT" -f --no-pager
 }
 
 print_auth_status() {
@@ -119,6 +172,15 @@ print_auth_status() {
     fi
   fi
 
+  if bool_true "$EDGE_PREPARE_BEFORE_OAUTH"; then
+    if [[ -f $EDGE_READY_MARKER ]]; then
+      printf '[ OK ] Microsoft Edge first-run preparation is complete.\n'
+    else
+      printf '[ .. ] Microsoft Edge first-run preparation is incomplete.\n'
+      ((failures += 1))
+    fi
+  fi
+
   if bool_true "$AUTH_ONEDRIVE"; then
     if onedrive_authenticated; then
       printf '[ OK ] OneDrive has a local OAuth refresh token.\n'
@@ -126,10 +188,12 @@ print_auth_status() {
       printf '[ .. ] OneDrive is not authenticated.\n'
       ((failures += 1))
     fi
-    if onedrive_links_ready; then
-      printf '[ OK ] OneDrive home-folder links are configured.\n'
+    if onedrive_bootstrap_complete; then
+      printf '[ OK ] OneDrive initial sync and home-folder links are complete.\n'
+    elif onedrive_bootstrap_active; then
+      printf '[ .. ] OneDrive initial sync is running in the background.\n'
     else
-      printf '[ .. ] OneDrive home-folder links are not complete.\n'
+      printf '[ .. ] OneDrive initial sync and home-folder links are incomplete.\n'
       ((failures += 1))
     fi
   fi
@@ -159,73 +223,41 @@ authenticate_github() {
     success 'GitHub CLI is already authenticated.'
     return 0
   fi
-  ask "Authenticate GitHub CLI using the browser now?" yes || return 1
+  prepare_edge_for_oauth || return 1
+  ask 'Authenticate GitHub CLI using the browser now?' yes || return 1
   gh auth login --hostname github.com --web --git-protocol "$GITHUB_GIT_PROTOCOL"
   gh auth setup-git --hostname github.com
   github_authenticated || { warn 'GitHub CLI authentication did not validate.'; return 1; }
   success 'GitHub CLI authentication is valid and Git credential handling is configured.'
 }
 
-migrate_onedrive_link() {
-  local name=$1 sync_root=$2 backup_root=$3
-  local source="$HOME/$name" target="$sync_root/$name"
+start_onedrive_background_bootstrap() {
+  systemctl --user daemon-reload
+  if onedrive_bootstrap_active; then
+    success 'OneDrive initial synchronisation is already running in the background.'
+    return 0
+  fi
+  if onedrive_bootstrap_complete; then
+    success 'OneDrive initial synchronisation is already complete.'
+    return 0
+  fi
 
-  mkdir -p "$target"
-  if [[ -L $source ]]; then
-    if [[ $(readlink -f -- "$source") == $(readlink -m -- "$target") ]]; then
-      success "$source already links to $target"
-      return 0
-    fi
-    warn "$source is already a symbolic link to another location; leaving it unchanged."
+  systemctl --user reset-failed "$ONEDRIVE_BOOTSTRAP_UNIT" >/dev/null 2>&1 || true
+  rm -f "$ONEDRIVE_FAILED_MARKER"
+  systemctl --user start --no-block "$ONEDRIVE_BOOTSTRAP_UNIT"
+  sleep 1
+  if onedrive_bootstrap_failed; then
+    warn 'The OneDrive background service failed to start.'
+    print_onedrive_background_status
     return 1
   fi
 
-  if mountpoint -q "$source" 2>/dev/null; then
-    warn "$source is a mount point; refusing to replace it with a symbolic link."
-    return 1
-  fi
-
-  if [[ -e $source && ! -d $source ]]; then
-    warn "$source exists but is not a directory; leaving it unchanged."
-    return 1
-  fi
-
-  if [[ -d $source ]]; then
-    mkdir -p "$backup_root"
-    chmod 0700 "$backup_root"
-    # Preserve remote files on name collisions. The complete original local
-    # directory is then retained in the dated backup for manual comparison.
-    rsync -a --ignore-existing -- "$source/" "$target/"
-    mv -- "$source" "$backup_root/$name"
-    info "Preserved the original $name folder at $backup_root/$name"
-  fi
-
-  ln -s -- "$target" "$source"
-  success "Linked $source -> $target"
-}
-
-configure_onedrive_links() {
-  local sync_root="$HOME/$ONEDRIVE_SYNC_DIR"
-  local backup_root="$BACKUP_ROOT_BASE/$(date +'%Y%m%d-%H%M%S')"
-  local name failures=0
-  local -a names
-
-  mkdir -p "$sync_root"
-  read -r -a names <<< "$ONEDRIVE_LINK_DIRS"
-  for name in "${names[@]}"; do
-    migrate_onedrive_link "$name" "$sync_root" "$backup_root" || ((failures += 1))
-  done
-
-  if [[ -d $backup_root ]]; then
-    cat > "$backup_root/README.txt" <<EOF_BACKUP
-These folders were retained by arch-workstation before replacing the normal
-home-directory paths with OneDrive links. Files with names that already existed
-in OneDrive were deliberately not overwritten. Review this backup before deleting it.
-EOF_BACKUP
-    chmod 0600 "$backup_root/README.txt"
-  fi
-
-  ((failures == 0))
+  success 'OneDrive initial synchronisation was queued as a background user service.'
+  cat <<'EOF_STATUS'
+You can close this terminal. Monitor progress with:
+  archctl auth onedrive-status
+  archctl auth onedrive-logs
+EOF_STATUS
 }
 
 authenticate_onedrive() {
@@ -234,7 +266,8 @@ authenticate_onedrive() {
   chmod 0700 "$HOME/.config/onedrive"
 
   if ! onedrive_authenticated; then
-    ask "Authenticate the OneDrive client using the browser now?" yes || return 1
+    prepare_edge_for_oauth || return 1
+    ask 'Authenticate the OneDrive client using the browser now?' yes || return 1
     onedrive
   fi
   onedrive_authenticated || { warn 'OneDrive authentication did not create a refresh token.'; return 1; }
@@ -248,27 +281,21 @@ authenticate_onedrive() {
     return 0
   fi
 
-  info 'Displaying the effective OneDrive configuration.'
-  onedrive --display-config
-  info 'Running the required non-destructive OneDrive dry run.'
-  onedrive --sync --verbose --dry-run
+  if onedrive_bootstrap_active; then
+    success 'OneDrive initial synchronisation is already running in the background.'
+    echo "Monitor it with: archctl auth onedrive-status"
+    return 0
+  fi
 
-  ask "Run the initial OneDrive synchronisation and then link $ONEDRIVE_LINK_DIRS?" yes || {
-    warn 'OneDrive is authenticated, but the initial sync and folder links were deferred.'
+  ask "Start the initial OneDrive sync and link $ONEDRIVE_LINK_DIRS?" yes || {
+    warn 'OneDrive is authenticated, but initial synchronisation was deferred.'
     return 1
   }
 
-  onedrive --sync --verbose
-  configure_onedrive_links || {
-    warn 'One or more existing home folders could not be linked safely. Review the warnings and rerun this command.'
-    return 1
-  }
-  # Upload any non-conflicting files copied from the original local folders.
-  onedrive --sync --verbose
-
-  if bool_true "$ONEDRIVE_ENABLE_SERVICE"; then
-    systemctl --user enable --now onedrive.service
-    success 'The OneDrive user service is enabled and running.'
+  if bool_true "$ONEDRIVE_INITIAL_SYNC_BACKGROUND"; then
+    start_onedrive_background_bootstrap
+  else
+    /usr/local/bin/arch-workstation-onedrive-bootstrap
   fi
 }
 
@@ -299,6 +326,7 @@ authenticate_vscode() {
 authenticate_edge() {
   command -v microsoft-edge-stable >/dev/null 2>&1 \
     || { warn 'Microsoft Edge is not installed; run archctl apply first.'; return 1; }
+  prepare_edge_for_oauth || return 1
   launch_gui_auth edge 'Microsoft Edge profile sync' microsoft-edge-stable --new-window edge://settings/profiles
 }
 
@@ -309,6 +337,7 @@ authenticate_steam() {
 
 run_enabled_authentication() {
   local failures=0
+
   bool_true "$AUTH_GITHUB_CLI" && authenticate_github || {
     bool_true "$AUTH_GITHUB_CLI" && ((failures += 1)) || true
   }
@@ -332,15 +361,21 @@ case "$TARGET" in
     print_auth_status
     ;;
   reset)
-    rm -f "$AUTH_COMPLETE_MARKER"
+    rm -f "$AUTH_COMPLETE_MARKER" "$EDGE_READY_MARKER"
     rm -f "$GUI_MARKER_DIR"/* 2>/dev/null || true
-    success 'First-login authentication markers were reset. Existing application tokens were not removed.'
+    success 'First-login authentication markers were reset. Existing application tokens and OneDrive data were not removed.'
     ;;
   github)
     authenticate_github
     ;;
   onedrive)
     authenticate_onedrive
+    ;;
+  onedrive-status)
+    print_onedrive_background_status
+    ;;
+  onedrive-logs)
+    follow_onedrive_logs
     ;;
   vscode)
     authenticate_vscode
@@ -357,6 +392,7 @@ Arch Workstation authentication wizard
 ======================================
 This wizard uses each application's supported login flow. It does not copy
 passwords, OAuth tokens, browser cookies, or active sessions into the project.
+Long-running OneDrive setup continues as a background user service.
 EOF_INTRO
     failures=0
     run_enabled_authentication || failures=$?
@@ -367,7 +403,7 @@ EOF_INTRO
     if ((failures)); then
       warn "$failures authentication item(s) were skipped or incomplete. Rerun 'archctl auth' at any time."
     else
-      success 'All enabled authentication items are complete.'
+      success 'All enabled interactive authentication items are complete or queued.'
     fi
     ;;
 esac

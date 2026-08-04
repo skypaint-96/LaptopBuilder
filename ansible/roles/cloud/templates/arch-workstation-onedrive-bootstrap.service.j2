@@ -1,0 +1,16 @@
+[Unit]
+Description=Arch Workstation OneDrive initial synchronisation
+Documentation=https://github.com/abraunegg/onedrive/blob/master/docs/usage.md
+After=graphical-session.target
+ConditionPathExists=%h/.config/onedrive/refresh_token
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/arch-workstation-onedrive-bootstrap
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=default.target

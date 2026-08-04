@@ -17,6 +17,34 @@
     mode: '0600'
   when: enable_onedrive | bool
 
+
+- name: Install the OneDrive bootstrap helper
+  ansible.builtin.copy:
+    src: "{{ workstation_repo_root }}/scripts/onedrive-bootstrap.sh"
+    dest: /usr/local/bin/arch-workstation-onedrive-bootstrap
+    owner: root
+    group: root
+    mode: '0755'
+  when: enable_onedrive | bool
+
+- name: Install the OneDrive bootstrap user service
+  ansible.builtin.template:
+    src: arch-workstation-onedrive-bootstrap.service.j2
+    dest: /usr/lib/systemd/user/arch-workstation-onedrive-bootstrap.service
+    owner: root
+    group: root
+    mode: '0644'
+  when: enable_onedrive | bool
+
+- name: Remove the OneDrive bootstrap integration when disabled
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/arch-workstation-onedrive-bootstrap
+    - /usr/lib/systemd/user/arch-workstation-onedrive-bootstrap.service
+  when: not (enable_onedrive | bool)
+
 - name: Install the first-login authentication launcher
   ansible.builtin.copy:
     src: "{{ workstation_repo_root }}/scripts/first-login-auth.sh"
