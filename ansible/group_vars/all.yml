@@ -4,6 +4,20 @@ workstation_repo_root: /opt/arch-workstation
 console_keymap: uk
 x11_layout: gb
 enable_ssh: true
+enable_onedrive: true
+onedrive_sync_dir: OneDrive
+onedrive_link_dirs: Documents Pictures Videos
+onedrive_skip_dotfiles: true
+onedrive_skip_symlinks: true
+onedrive_use_recycle_bin: true
+onedrive_enable_service: true
+enable_first_login_auth: true
+auth_github_cli: true
+github_git_protocol: https
+auth_onedrive: true
+auth_vscode: true
+auth_edge: true
+auth_steam: true
 enable_docker: true
 docker_add_user_to_group: true
 enable_gaming: true

@@ -41,7 +41,10 @@ if bool_true "$PROVISION_NONINTERACTIVE"; then
 fi
 sudo pacman "${pacman_args[@]}"
 
-if bool_true "$ENABLE_AUR" && command -v "$AUR_HELPER" >/dev/null 2>&1; then
+if bool_true "$ENABLE_AUR"; then
+  # An official pacman upgrade can change libalpm's ABI. Revalidate or rebuild
+  # the configured helper before invoking it, then update remaining AUR packages.
+  "$REPO_ROOT/scripts/install-aur.sh"
   declare -a aur_args=(-Sua --needed)
   if bool_true "$AUR_NONINTERACTIVE"; then
     aur_args+=(--noconfirm --skipreview)

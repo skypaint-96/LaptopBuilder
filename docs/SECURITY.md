@@ -72,7 +72,7 @@ The default USB workflow executes the configured live Git ref when it can be fet
 
 ## AUR policy
 
-AUR packages execute community-maintained PKGBUILDs. Version 0.2 uses the prebuilt `paru-bin` AUR package to avoid compiling Paru and selecting a Rust provider.
+AUR packages execute community-maintained PKGBUILDs. The current default builds `paru` from source against the installed pacman/libalpm ABI and installs the explicit Rust provider first to avoid an interactive provider menu. The allow-list still requires independent review.
 
 The default `AUR_NONINTERACTIVE=true` suppresses routine PKGBUILD/rebuild prompts and acts only on this explicit allow-list:
 

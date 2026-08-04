@@ -1,0 +1,51 @@
+---
+- name: Ensure OneDrive configuration directory exists
+  ansible.builtin.file:
+    path: "/home/{{ arch_user }}/.config/onedrive"
+    state: directory
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0700'
+  when: enable_onedrive | bool
+
+- name: Install managed OneDrive configuration
+  ansible.builtin.template:
+    src: onedrive-config.j2
+    dest: "/home/{{ arch_user }}/.config/onedrive/config"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0600'
+  when: enable_onedrive | bool
+
+- name: Install the first-login authentication launcher
+  ansible.builtin.copy:
+    src: "{{ workstation_repo_root }}/scripts/first-login-auth.sh"
+    dest: /usr/local/bin/arch-workstation-first-login-auth
+    owner: root
+    group: root
+    mode: '0755'
+  when: enable_first_login_auth | bool
+
+- name: Configure first-login authentication autostart
+  ansible.builtin.copy:
+    content: |
+      [Desktop Entry]
+      Type=Application
+      Version=1.0
+      Name=Arch Workstation Authentication
+      Comment=Complete supported application sign-ins once after the first graphical login
+      Exec=/usr/local/bin/arch-workstation-first-login-auth
+      Terminal=false
+      OnlyShowIn=XFCE;
+      X-GNOME-Autostart-enabled=true
+    dest: /etc/xdg/autostart/arch-workstation-auth.desktop
+    owner: root
+    group: root
+    mode: '0644'
+  when: enable_first_login_auth | bool
+
+- name: Remove first-login authentication autostart when disabled
+  ansible.builtin.file:
+    path: /etc/xdg/autostart/arch-workstation-auth.desktop
+    state: absent
+  when: not (enable_first_login_auth | bool)

@@ -20,6 +20,7 @@ structure:
 	./tests/test-usb-secrets.sh
 	./tests/test-usb-cache.sh
 	./tests/test-staged-credentials.sh
+	./tests/test-auth.sh
 
 ansible:
 	./tests/ansible-syntax.sh

@@ -25,6 +25,9 @@
       tags: [desktop]
     - role: development
       tags: [development]
+    - role: cloud
+      when: (enable_onedrive | bool) or (enable_first_login_auth | bool)
+      tags: [cloud, auth]
     - role: docker
       when: enable_docker | bool
       tags: [docker]

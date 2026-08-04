@@ -42,9 +42,13 @@ ARCH_WORKSTATION_CONFIG_GROUP=root \
 [[ -L $target/config/install.conf ]] || { echo 'Installed configuration symlink is missing.' >&2; exit 1; }
 [[ $(readlink "$target/config/install.conf") == "$config" ]] || { echo 'Configuration symlink points to the wrong path.' >&2; exit 1; }
 grep -qx 'DISK="/dev/test"' "$config"
-grep -qx 'AUR_HELPER_PACKAGE="paru-bin"' "$config"
+grep -qx 'AUR_HELPER_PACKAGE="paru"' "$config"
 grep -qx 'AUR_NONINTERACTIVE=true' "$config"
 grep -qx 'PROVISION_NONINTERACTIVE=true' "$config"
+grep -Eq '^AUR_PACKAGES=.*onedrive-abraunegg' "$config"
+grep -qx 'ENABLE_ONEDRIVE=true' "$config"
+grep -qx 'ONEDRIVE_LINK_DIRS="Documents Pictures Videos"' "$config"
+grep -qx 'ENABLE_FIRST_LOGIN_AUTH=true' "$config"
 [[ -L $bin/archctl && -L $bin/arch-workstation-start && -L $bin/arch-workstation-build-usb ]] \
   || { echo 'Command symlinks were not created.' >&2; exit 1; }
 [[ -d $state ]] || { echo 'State directory was not created.' >&2; exit 1; }

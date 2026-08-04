@@ -107,6 +107,27 @@ if bool_true "$ENABLE_AUR"; then
 fi
 
 check_package github-cli
+if bool_true "$ENABLE_ONEDRIVE"; then
+  check_package onedrive-abraunegg
+  run_check "Managed OneDrive configuration exists" test -r "/home/$USERNAME/.config/onedrive/config"
+  if [[ -s /home/$USERNAME/.config/onedrive/refresh_token ]]; then
+    check_ok "OneDrive authentication material exists for $USERNAME"
+    read -r -a onedrive_links <<< "$ONEDRIVE_LINK_DIRS"
+    for directory in "${onedrive_links[@]}"; do
+      if [[ -L /home/$USERNAME/$directory \
+        && $(readlink -f -- "/home/$USERNAME/$directory") == $(readlink -m -- "/home/$USERNAME/$ONEDRIVE_SYNC_DIR/$directory") ]]; then
+        check_ok "$directory links into OneDrive"
+      else
+        check_warn "$directory is not yet linked into OneDrive; run 'archctl auth onedrive' after reviewing the initial sync."
+      fi
+    done
+  else
+    check_warn "OneDrive is installed but awaits first-login authentication."
+  fi
+fi
+if bool_true "$ENABLE_FIRST_LOGIN_AUTH"; then
+  run_check "First-login authentication autostart is installed" test -r /etc/xdg/autostart/arch-workstation-auth.desktop
+fi
 run_check "Console keyboard layout matches configuration" grep -qxF "KEYMAP=$KEYMAP" /etc/vconsole.conf
 run_check "X11 keyboard layout matches configuration" grep -Eq "Option[[:space:]]+\"XkbLayout\"[[:space:]]+\"$X11_LAYOUT\"" /etc/X11/xorg.conf.d/00-keyboard.conf
 

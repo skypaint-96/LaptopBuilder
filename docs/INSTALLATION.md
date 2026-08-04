@@ -57,7 +57,7 @@ GPU_VENDOR="intel"
 ENABLE_T480=true
 ENABLE_SSH=true
 ENABLE_MULTILIB=true
-AUR_HELPER_PACKAGE="paru-bin"
+AUR_HELPER_PACKAGE="paru"
 AUR_NONINTERACTIVE=true
 PROVISION_NONINTERACTIVE=true
 ENABLE_SECURE_BOOT=true
@@ -110,7 +110,7 @@ The preflight verifies:
 - network and time service;
 - live-ISO `multilib` activation and database synchronisation;
 - resolution of every configured official package;
-- exact AUR metadata matches for `paru-bin`, Edge, VS Code, and PowerShell.
+- exact AUR metadata matches for `paru`, Edge, VS Code, PowerShell, and OneDrive.
 
 Resolve every error before installation. No disk-erasure confirmation is requested in preflight mode.
 
@@ -161,15 +161,22 @@ The state machine can safely be rerun. Depending on detected state it will:
 
 - apply the full Arch upgrade;
 - run all Ansible roles as root through the established sudo session;
-- bootstrap `paru-bin` without Rust/Cargo provider selection;
+- build `paru` against the installed pacman/libalpm ABI after installing the explicit Rust provider;
 - install the explicit AUR allow-list without routine review prompts;
-- configure VS Code and PowerShell as the normal user;
+- configure VS Code, PowerShell, OneDrive policy, and the first-login authentication launcher as the normal user;
 - rebuild/sign/verify all boot assets after package transactions;
 - consume staged LUKS/TPM credentials automatically when supplied by the USB, or prompt when unavailable;
 - enrol the TPM2 token and rebuild the signed UKIs;
 - run `archctl verify` and mark setup complete.
 
 Choose a daily TPM PIN with enough digits to resist casual guessing. The normal LUKS passphrase remains installed and should be kept offline as the main recovery path.
+
+When setup reaches the complete state, log out and back in once. The Xfce autostart entry opens the supported-app authentication wizard. It authenticates GitHub CLI and OneDrive through their browser flows, then offers to open VS Code, Edge, and Steam for their own sign-in interfaces. The OneDrive path performs a dry run and initial sync before linking `Documents`, `Pictures`, and `Videos`; existing local folders are retained in a dated backup. The wizard can always be rerun manually:
+
+```bash
+archctl auth
+archctl auth status
+```
 
 ## 10. Verify and test a reboot
 

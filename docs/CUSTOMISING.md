@@ -22,6 +22,10 @@ Important switches include:
 | `KEYMAP` | Sets the virtual-console keyboard map, for example `uk` |
 | `X11_LAYOUT` | Sets the graphical X11 keyboard layout, for example `gb` |
 | `ENABLE_SSH` | Installs, enables, and starts the OpenSSH server; true by default |
+| `ENABLE_ONEDRIVE` | Installs the maintained OneDrive client and managed per-user configuration |
+| `ONEDRIVE_SYNC_DIR` | Home-relative OneDrive sync root, default `OneDrive` |
+| `ONEDRIVE_LINK_DIRS` | Home folders linked after a successful initial sync |
+| `ENABLE_FIRST_LOGIN_AUTH` | Offers supported application sign-ins once after setup completes |
 | `TPM_PCRS` | Selects the systemd TPM PCR binding |
 | `TPM_WITH_PIN` | Requires a TPM PIN at early boot |
 
@@ -132,6 +136,10 @@ INSTALL_POWERSHELL_MODULES=true
 ```
 
 The configuration script installs missing modules for the current user only.
+
+## Authentication and OneDrive
+
+Application sessions are deliberately not stored in Git or the installer USB. The one-time graphical wizard is configured through the `AUTH_*` switches and can be rerun with `archctl auth`. See [AUTHENTICATION.md](AUTHENTICATION.md) for the safe OneDrive initial-sync and folder-link workflow.
 
 ## VS Code
 

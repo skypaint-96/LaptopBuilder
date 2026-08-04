@@ -15,12 +15,38 @@ validate_config runtime
 bool_true "$ENABLE_AUR" || exit 0
 
 bootstrap_aur_helper() {
-  command -v "$AUR_HELPER" >/dev/null 2>&1 && return 0
+  local package=$AUR_HELPER_PACKAGE temp_dir candidate
+  local -a pacman_args makepkg_args installed_helpers=()
 
-  local package=$AUR_HELPER_PACKAGE temp_dir
-  local -a pacman_args makepkg_args
+  helper_matches_policy() {
+    command -v "$AUR_HELPER" >/dev/null 2>&1 || return 1
+    "$AUR_HELPER" --version >/dev/null 2>&1 || return 1
+    case "$package" in
+      paru) pacman -Q paru >/dev/null 2>&1 \
+        && ! pacman -Q paru-bin >/dev/null 2>&1 \
+        && ! pacman -Q paru-bin-debug >/dev/null 2>&1 ;;
+      paru-bin) pacman -Q paru-bin >/dev/null 2>&1 ;;
+    esac
+  }
+
+  if helper_matches_policy; then
+    return 0
+  fi
+
+  if command -v "$AUR_HELPER" >/dev/null 2>&1; then
+    warn "The installed '$AUR_HELPER' is broken or does not match AUR_HELPER_PACKAGE=$package; rebuilding it."
+  fi
+
+  for candidate in paru paru-debug paru-bin paru-bin-debug; do
+    pacman -Q "$candidate" >/dev/null 2>&1 && installed_helpers+=("$candidate")
+  done
+  if ((${#installed_helpers[@]})); then
+    pacman_args=(-Rns)
+    bool_true "$PROVISION_NONINTERACTIVE" && pacman_args+=(--noconfirm)
+    sudo pacman "${pacman_args[@]}" "${installed_helpers[@]}"
+  fi
+
   info "Bootstrapping the '$package' AUR package to provide the '$AUR_HELPER' command."
-
   if [[ $package == paru ]]; then
     info "Installing the explicit Rust provider first so makepkg cannot open a cargo provider menu."
     pacman_args=(-S --needed rust)
@@ -55,10 +81,9 @@ bootstrap_aur_helper() {
 
   rm -rf "$temp_dir"
   trap - EXIT
-  command -v "$AUR_HELPER" >/dev/null 2>&1 \
-    || die "$package completed without installing the '$AUR_HELPER' command."
+  helper_matches_policy \
+    || die "$package completed without installing a working '$AUR_HELPER' command."
 }
-
 bootstrap_aur_helper
 
 declare -a packages helper_args

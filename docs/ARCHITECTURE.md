@@ -68,7 +68,7 @@ The boot ISO cannot safely rewrite itself while executing. Cache-only refresh up
 | Initramfs/UKI | mkinitcpio + ukify | Arch-native generation of self-contained EFI kernel images |
 | Provisioning | Ansible Core | Desired-state-style, readable local roles without a permanent agent |
 | User automation | PowerShell 7 | Cross-platform profile and optional module management |
-| AUR helper | `paru` via `paru-bin` | Small explicit AUR allow-list; automated prompts are configurable |
+| AUR helper | source-built `paru` | Built against the installed libalpm ABI; small explicit AUR allow-list |
 
 ## Storage layout
 
@@ -134,7 +134,7 @@ Official Arch repositories are used whenever a package exists there. The request
 - `visual-studio-code-bin`
 - `powershell-bin`
 
-The AUR is not an official binary repository. The default workflow bootstraps `paru-bin` and builds/installs the explicit allow-list as the normal user, using the existing sudo session only where package installation requires it. Routine review prompts are suppressed by default for reduced intervention; `AUR_NONINTERACTIVE=false` restores manual review.
+The AUR is not an official binary repository. The default workflow builds `paru` from source against the installed pacman/libalpm ABI and installs the explicit allow-list as the normal user, using the existing sudo session only where package installation requires it. The explicit `rust` provider is installed first to prevent a provider-selection prompt. Routine review prompts are suppressed by default; `AUR_NONINTERACTIVE=false` restores manual review.
 
 For Steam, the gaming role installs an explicit Intel or AMD native and 32-bit Vulkan provider before installing `steam`. This prevents an ambiguous virtual-driver dependency from selecting an unsuitable provider. Gaming therefore requires multilib and does not accept the generic GPU profile.
 

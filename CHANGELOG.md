@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.6 - 2026-08-04
+
+### Added
+
+- Install and manage the `onedrive-abraunegg` client with a private per-user configuration and optional user service.
+- Add safe post-sync links for `Documents`, `Pictures`, and `Videos`, retaining dated local backups and never overwriting existing remote names during migration.
+- Add `archctl auth` plus a one-time Xfce first-login wizard for GitHub CLI, OneDrive, VS Code Settings Sync, Microsoft Edge profile sync, and Steam.
+- Add authentication and OneDrive policy settings to the normal configuration and USB guided editor.
+
+### Changed
+
+- Build Paru from source by default against the installed pacman/libalpm ABI, with automatic removal of incompatible `paru-bin`/debug packages and no Cargo-provider prompt.
+- Make `archctl update` revalidate or rebuild Paru after official package upgrades before processing AUR updates.
+- Keep application tokens and GUI completion markers local to the installed user; no active sessions are added to Git or USB secrets.
+
 ## 0.3.5 - 2026-08-04
 
 ### Added

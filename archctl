@@ -18,6 +18,7 @@ Commands:
   status                Show the current first-boot/security stage
   apply                 Apply desired system and user configuration
   provision             Alias for apply
+  auth [TARGET]         Authenticate supported apps or show/reset auth state
   secure-boot           Enrol owner keys and sign every EFI binary
   tpm-enroll            Enrol TPM2 unlock after Secure Boot is active
   tpm-remove            Remove TPM2 unlock and keep passphrase boot
@@ -96,6 +97,9 @@ case "$COMMAND" in
     ;;
   apply|provision)
     user_exec "$REPO_ROOT/scripts/provision.sh" "$@"
+    ;;
+  auth)
+    user_exec "$REPO_ROOT/scripts/auth.sh" "$@"
     ;;
   secure-boot)
     root_exec "$REPO_ROOT/scripts/security/secure-boot.sh" "$@"

@@ -122,9 +122,10 @@ bolt ethtool fwupd smartmontools thermald tlp tlp-rdw
 microsoft-edge-stable-bin
 visual-studio-code-bin
 powershell-bin
+onedrive-abraunegg
 ```
 
-The default helper bootstrap uses `paru-bin`, so first boot downloads the prebuilt Paru release through its AUR PKGBUILD rather than compiling Paru and selecting a Rust provider. `AUR_NONINTERACTIVE=true` installs only the configured allow-list with routine review prompts suppressed. Set it to `false` to print and confirm the helper build and retain Paru's review workflow. These packages are not built or supported by Arch Linux itself.
+The default helper bootstrap builds `paru` from source against the currently installed pacman/libalpm ABI. It installs the explicit `rust` provider before invoking makepkg, so no Cargo-provider menu appears. `AUR_NONINTERACTIVE=true` installs only the configured allow-list with routine review prompts suppressed. Set it to `false` to print and confirm the helper build and retain Paru's review workflow. These packages are not built or supported by Arch Linux itself.
 
 CI derives official and AUR package names from the repository configuration. It resolves official packages in a current Arch container and checks AUR names through the metadata API. Those checks detect naming/repository drift, not malicious or defective package contents.
 

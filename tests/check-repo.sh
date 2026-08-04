@@ -10,6 +10,7 @@ required=(
   usb/build.sh usb/cache.sh usb/configure.sh usb/secrets.sh
   usb/API_VERSION usb/lib/common.sh usb/live/archws-live
   scripts/finish.sh scripts/provision.sh scripts/install-aur.sh scripts/update.sh
+  scripts/auth.sh scripts/first-login-auth.sh
   scripts/install/01-preflight.sh
   scripts/install/10-disk.sh
   scripts/install/20-base.sh
@@ -32,10 +33,12 @@ required=(
   tests/test-usb-cache.sh
   tests/test-usb-layout.sh
   tests/test-usb-secrets.sh
+  tests/test-auth.sh
   ansible/site.yml
+  ansible/roles/cloud/tasks/main.yml ansible/roles/cloud/templates/onedrive-config.j2
   docs/INSTALLATION.md docs/ARCHITECTURE.md docs/SECURITY.md docs/RECOVERY.md
   docs/CUSTOMISING.md docs/PACKAGES.md docs/REFERENCES.md docs/TESTING.md
-  docs/MIGRATION.md docs/USB.md
+  docs/MIGRATION.md docs/USB.md docs/AUTHENTICATION.md
 )
 
 for path in "${required[@]}"; do
@@ -68,13 +71,20 @@ grep -q 'pacstrap -U' scripts/install/20-base.sh
 grep -q 'verify_aur_package_resolution' scripts/install/01-preflight.sh
 grep -q 'prepare_target_secure_boot' install.sh
 grep -q 'AUTO_PREPARE_SECURE_BOOT=true' config/install.conf.example
-grep -q 'AUR_HELPER_PACKAGE="paru-bin"' config/install.conf.example
+grep -q 'AUR_HELPER_PACKAGE="paru"' config/install.conf.example
 grep -q 'X11_LAYOUT="gb"' config/install.conf.example
 grep -q 'ENABLE_SSH=true' config/install.conf.example
 grep -q 'github-cli' ansible/roles/common/tasks/main.yml
 grep -q 'Option "XkbLayout"' ansible/roles/common/tasks/main.yml
 grep -q 'Apply the OpenSSH server policy' ansible/roles/common/tasks/main.yml
 grep -q 'apply|provision' archctl
+grep -q 'auth)' archctl
+grep -q 'onedrive-abraunegg' config/install.conf.example
+grep -q 'ONEDRIVE_LINK_DIRS="Documents Pictures Videos"' config/install.conf.example
+grep -q 'arch-workstation-auth.desktop' ansible/roles/cloud/tasks/main.yml
+grep -q 'rsync -a --ignore-existing' scripts/auth.sh
+grep -q 'refresh_token' scripts/auth.sh
+grep -q 'paru-bin-debug' scripts/install-aur.sh
 grep -q -- '--skipreview' scripts/install-aur.sh
 grep -q 'sudo env ANSIBLE_CONFIG=' scripts/provision.sh
 grep -q 'become: false' ansible/site.yml

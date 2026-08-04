@@ -1,6 +1,6 @@
 # Upstream references
 
-Reviewed for version 0.3.0 on 2026-08-03. Upstream documentation changes over time; re-check it before making security or boot changes.
+Reviewed for version 0.3.6 on 2026-08-04. Upstream documentation changes over time; re-check it before making security or boot changes.
 
 ## Arch installation and boot
 
@@ -43,4 +43,7 @@ Reviewed for version 0.3.0 on 2026-08-03. Upstream documentation changes over ti
 - Visual Studio Code AUR package: https://aur.archlinux.org/packages/visual-studio-code-bin
 - Microsoft Edge AUR package: https://aur.archlinux.org/packages/microsoft-edge-stable-bin
 
-- Paru binary AUR package: https://aur.archlinux.org/packages/paru-bin
+- Paru source AUR package: https://aur.archlinux.org/packages/paru
+- OneDrive client AUR package: https://aur.archlinux.org/packages/onedrive-abraunegg
+- OneDrive usage: https://github.com/abraunegg/onedrive/blob/master/docs/usage.md
+- GitHub CLI authentication: https://cli.github.com/manual/gh_auth_login

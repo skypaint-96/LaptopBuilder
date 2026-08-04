@@ -75,6 +75,20 @@ declare -a ansible_args=(
   --extra-vars "console_keymap=$KEYMAP"
   --extra-vars "x11_layout=$X11_LAYOUT"
   --extra-vars "enable_ssh=$ENABLE_SSH"
+  --extra-vars "enable_onedrive=$ENABLE_ONEDRIVE"
+  --extra-vars "onedrive_sync_dir=$ONEDRIVE_SYNC_DIR"
+  --extra-vars "onedrive_link_dirs=$ONEDRIVE_LINK_DIRS"
+  --extra-vars "onedrive_skip_dotfiles=$ONEDRIVE_SKIP_DOTFILES"
+  --extra-vars "onedrive_skip_symlinks=$ONEDRIVE_SKIP_SYMLINKS"
+  --extra-vars "onedrive_use_recycle_bin=$ONEDRIVE_USE_RECYCLE_BIN"
+  --extra-vars "onedrive_enable_service=$ONEDRIVE_ENABLE_SERVICE"
+  --extra-vars "enable_first_login_auth=$ENABLE_FIRST_LOGIN_AUTH"
+  --extra-vars "auth_github_cli=$AUTH_GITHUB_CLI"
+  --extra-vars "github_git_protocol=$GITHUB_GIT_PROTOCOL"
+  --extra-vars "auth_onedrive=$AUTH_ONEDRIVE"
+  --extra-vars "auth_vscode=$AUTH_VSCODE"
+  --extra-vars "auth_edge=$AUTH_EDGE"
+  --extra-vars "auth_steam=$AUTH_STEAM"
   --extra-vars "enable_docker=$ENABLE_DOCKER"
   --extra-vars "docker_add_user_to_group=$DOCKER_ADD_USER_TO_GROUP"
   --extra-vars "enable_gaming=$ENABLE_GAMING"
@@ -120,6 +134,9 @@ fi
 sudo install -d -m 0755 "$STATE_DIR"
 printf '%s\n' "$(date --iso-8601=seconds)" | sudo tee "$STATE_DIR/provisioned" >/dev/null
 success "Provisioning completed."
+if bool_true "$ENABLE_FIRST_LOGIN_AUTH"; then
+  echo "Supported application sign-ins will be offered at the next graphical login; rerun them with: archctl auth"
+fi
 if bool_true "$DOCKER_ADD_USER_TO_GROUP"; then
   echo "Docker group membership takes effect after the next login or reboot."
 fi

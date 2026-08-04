@@ -42,6 +42,8 @@ The project treats the operating system as rebuildable configuration. It creates
 | Docker | `docker`, Buildx, and Compose |
 | Git | `git` |
 | Steam | `steam`, GameMode, MangoHud, and explicit 32-bit Vulkan userspace |
+| OneDrive | `onedrive-abraunegg` from AUR with managed config and user service |
+| GitHub CLI | `github-cli` from official repositories |
 
 ## Build the installation USB
 
@@ -112,6 +114,7 @@ archctl finish              Resume the complete first-boot workflow
 archctl status              Show the detected setup stage and next action
 archctl apply               Reapply desired system and user configuration
 archctl provision           Alias for archctl apply
+archctl auth [TARGET]        Run or inspect supported application sign-ins
 archctl secure-boot         Enrol/sign or repair the Secure Boot chain
 archctl tpm-enroll          Enrol TPM2 unlocking after Secure Boot is active
 archctl tpm-remove          Return to passphrase-only unlocking
@@ -154,4 +157,6 @@ The installed repository also exposes `arch-workstation-build-usb` as a symlink 
 - Docker-group membership is root-equivalent.
 - Firmware key changes, TPM clearing, or motherboard replacement can require the retained LUKS passphrase.
 
-Read [docs/USB.md](docs/USB.md), [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/SECURITY.md](docs/SECURITY.md), and [docs/RECOVERY.md](docs/RECOVERY.md) before relying on the installation for important data.
+After `archctl finish`, the next graphical login offers supported application sign-ins. OneDrive authentication performs a dry run and initial sync before safely linking `Documents`, `Pictures`, and `Videos`; existing local folders are retained in dated backups.
+
+Read [docs/USB.md](docs/USB.md), [docs/INSTALLATION.md](docs/INSTALLATION.md), [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md), [docs/SECURITY.md](docs/SECURITY.md), and [docs/RECOVERY.md](docs/RECOVERY.md) before relying on the installation for important data.

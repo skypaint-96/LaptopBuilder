@@ -130,7 +130,7 @@ EOF
       sudo "${root_env[@]}" "$REPO_ROOT/scripts/security/verify.sh"
       sudo install -d -m 0755 "$STATE_DIR"
       printf '%s\n' "$(date --iso-8601=seconds)" | sudo tee "$STATE_DIR/complete" >/dev/null
-      success "Workstation setup is complete. Future maintenance uses 'archctl update'."
+      success "Workstation setup is complete. Use 'archctl update' for maintenance and 'archctl auth' for application sign-ins."
       exit 0
       ;;
 

@@ -27,10 +27,10 @@ ENABLE_MULTILIB=true
 ENABLE_SSD_TRIM=true
 ENABLE_AUR=true
 AUR_HELPER="paru"
-# paru-bin is the upstream-maintained prebuilt AUR package. It avoids compiling
-# Paru and therefore avoids the Rust/Cargo provider prompt during first boot.
-AUR_HELPER_PACKAGE="paru-bin"
-AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin"
+# Build Paru from source against the installed pacman/libalpm ABI. The bootstrap
+# installs the explicit rust provider first, so no Cargo-provider prompt appears.
+AUR_HELPER_PACKAGE="paru"
+AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin onedrive-abraunegg"
 # Automated mode trusts only the explicit allow-list above and skips routine
 # PKGBUILD/rebuild prompts. Set false when you want to review every AUR build.
 AUR_NONINTERACTIVE=true
@@ -49,6 +49,29 @@ INSTALL_VSCODE_EXTENSIONS=true
 ENABLE_BLUETOOTH=true
 # Install and enable the OpenSSH server by default. Review sshd_config before exposing it beyond a trusted network.
 ENABLE_SSH=true
+
+# Cloud sync and first-login authentication. Tokens remain in each application's
+# normal per-user credential store and are never copied into Git or the USB.
+ENABLE_ONEDRIVE=true
+# Relative to the configured user's home directory.
+ONEDRIVE_SYNC_DIR="OneDrive"
+# These home folders are linked to matching directories under ONEDRIVE_SYNC_DIR
+# only after OneDrive authentication and a successful initial synchronisation.
+ONEDRIVE_LINK_DIRS="Documents Pictures Videos"
+ONEDRIVE_SKIP_DOTFILES=true
+ONEDRIVE_SKIP_SYMLINKS=true
+ONEDRIVE_USE_RECYCLE_BIN=true
+ONEDRIVE_ENABLE_SERVICE=true
+
+# Start a one-time wizard after the first graphical login. The wizard checks each
+# provider first and only asks for authentication when no valid session is found.
+ENABLE_FIRST_LOGIN_AUTH=true
+AUTH_GITHUB_CLI=true
+GITHUB_GIT_PROTOCOL="https"
+AUTH_ONEDRIVE=true
+AUTH_VSCODE=true
+AUTH_EDGE=true
+AUTH_STEAM=true
 
 ENABLE_SECURE_BOOT=true
 # Requiring Setup Mode before disk changes lets the installer enrol owner keys

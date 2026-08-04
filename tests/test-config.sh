@@ -16,7 +16,7 @@ validate_config runtime
 [[ $FILESYSTEM == btrfs ]]
 [[ $KEYMAP == uk ]]
 [[ $X11_LAYOUT == gb ]]
-[[ $AUR_HELPER_PACKAGE == paru-bin ]]
+[[ $AUR_HELPER_PACKAGE == paru ]]
 bool_true "$ENABLE_SECURE_BOOT"
 bool_true "$AUTO_PREPARE_SECURE_BOOT"
 bool_true "$REQUIRE_SETUP_MODE_AT_INSTALL"
@@ -24,6 +24,12 @@ bool_true "$ENABLE_TPM"
 bool_true "$AUR_NONINTERACTIVE"
 bool_true "$PROVISION_NONINTERACTIVE"
 bool_true "$ENABLE_SSH"
+bool_true "$ENABLE_ONEDRIVE"
+[[ $ONEDRIVE_SYNC_DIR == OneDrive ]]
+[[ $ONEDRIVE_LINK_DIRS == 'Documents Pictures Videos' ]]
+bool_true "$ENABLE_FIRST_LOGIN_AUTH"
+bool_true "$AUTH_GITHUB_CLI"
+bool_true "$AUTH_ONEDRIVE"
 
 invalid=$(mktemp)
 trap 'rm -f "$invalid"' EXIT

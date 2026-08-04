@@ -138,7 +138,44 @@ set_config_value() {
   rm -f "$temp"
 }
 
-set_config_value AUR_HELPER_PACKAGE 'AUR_HELPER_PACKAGE="paru-bin"'
+ensure_config_value() {
+  local key=$1 assignment=$2
+  grep -q "^${key}=" "$CONFIG_FILE" || set_config_value "$key" "$assignment"
+}
+
+append_config_package() {
+  local key=$1 package=$2 current quoted item found=false
+  local -a current_packages=()
+  current=$(bash -c 'source "$1"; printf "%s" "${!2:-}"' _ "$CONFIG_FILE" "$key")
+  read -r -a current_packages <<< "$current"
+  for item in "${current_packages[@]}"; do
+    if [[ $item == "$package" ]]; then
+      found=true
+      break
+    fi
+  done
+  if [[ $found == false ]]; then
+    current="${current:+$current }$package"
+    printf -v quoted '%q' "$current"
+    set_config_value "$key" "$key=$quoted"
+  fi
+}
+set_config_value AUR_HELPER_PACKAGE 'AUR_HELPER_PACKAGE="paru"'
+append_config_package AUR_PACKAGES onedrive-abraunegg
+ensure_config_value ENABLE_ONEDRIVE 'ENABLE_ONEDRIVE=true'
+ensure_config_value ONEDRIVE_SYNC_DIR 'ONEDRIVE_SYNC_DIR="OneDrive"'
+ensure_config_value ONEDRIVE_LINK_DIRS 'ONEDRIVE_LINK_DIRS="Documents Pictures Videos"'
+ensure_config_value ONEDRIVE_SKIP_DOTFILES 'ONEDRIVE_SKIP_DOTFILES=true'
+ensure_config_value ONEDRIVE_SKIP_SYMLINKS 'ONEDRIVE_SKIP_SYMLINKS=true'
+ensure_config_value ONEDRIVE_USE_RECYCLE_BIN 'ONEDRIVE_USE_RECYCLE_BIN=true'
+ensure_config_value ONEDRIVE_ENABLE_SERVICE 'ONEDRIVE_ENABLE_SERVICE=true'
+ensure_config_value ENABLE_FIRST_LOGIN_AUTH 'ENABLE_FIRST_LOGIN_AUTH=true'
+ensure_config_value AUTH_GITHUB_CLI 'AUTH_GITHUB_CLI=true'
+ensure_config_value GITHUB_GIT_PROTOCOL 'GITHUB_GIT_PROTOCOL="https"'
+ensure_config_value AUTH_ONEDRIVE 'AUTH_ONEDRIVE=true'
+ensure_config_value AUTH_VSCODE 'AUTH_VSCODE=true'
+ensure_config_value AUTH_EDGE 'AUTH_EDGE=true'
+ensure_config_value AUTH_STEAM 'AUTH_STEAM=true'
 set_config_value PROVISION_NONINTERACTIVE 'PROVISION_NONINTERACTIVE=true'
 if [[ $APPLY_AUTOMATION_DEFAULTS == true ]]; then
   set_config_value AUR_NONINTERACTIVE 'AUR_NONINTERACTIVE=true'

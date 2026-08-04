@@ -1,0 +1,6 @@
+# Managed by arch-workstation. Authentication tokens are stored separately by
+# the OneDrive client in this user's private configuration directory.
+sync_dir = "~/{{ onedrive_sync_dir }}"
+skip_dotfiles = "{{ onedrive_skip_dotfiles | bool | lower }}"
+skip_symlinks = "{{ onedrive_skip_symlinks | bool | lower }}"
+use_recycle_bin = "{{ onedrive_use_recycle_bin | bool | lower }}"

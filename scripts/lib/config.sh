@@ -19,8 +19,8 @@ set_config_defaults() {
   ENABLE_SSD_TRIM=true
   ENABLE_AUR=true
   AUR_HELPER="paru"
-  AUR_HELPER_PACKAGE="paru-bin"
-  AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin"
+  AUR_HELPER_PACKAGE="paru"
+  AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin onedrive-abraunegg"
   AUR_NONINTERACTIVE=true
   PROVISION_NONINTERACTIVE=true
 
@@ -34,6 +34,22 @@ set_config_defaults() {
   INSTALL_VSCODE_EXTENSIONS=true
   ENABLE_BLUETOOTH=true
   ENABLE_SSH=true
+
+  ENABLE_ONEDRIVE=true
+  ONEDRIVE_SYNC_DIR="OneDrive"
+  ONEDRIVE_LINK_DIRS="Documents Pictures Videos"
+  ONEDRIVE_SKIP_DOTFILES=true
+  ONEDRIVE_SKIP_SYMLINKS=true
+  ONEDRIVE_USE_RECYCLE_BIN=true
+  ONEDRIVE_ENABLE_SERVICE=true
+
+  ENABLE_FIRST_LOGIN_AUTH=true
+  AUTH_GITHUB_CLI=true
+  GITHUB_GIT_PROTOCOL="https"
+  AUTH_ONEDRIVE=true
+  AUTH_VSCODE=true
+  AUTH_EDGE=true
+  AUTH_STEAM=true
 
   ENABLE_SECURE_BOOT=true
   REQUIRE_SETUP_MODE_AT_INSTALL=true
@@ -89,6 +105,29 @@ validate_package_list() {
   done
 }
 
+validate_simple_name_list() {
+  local name=$1 value=${!1} item
+  local -a items
+  read -r -a items <<< "$value"
+  for item in "${items[@]}"; do
+    [[ $item =~ ^[a-zA-Z0-9._-]+$ && $item != .* && $item != -* ]] \
+      || die "$name contains an invalid directory name: $item"
+  done
+}
+
+validate_home_relative_path() {
+  local name=$1 value=${!1} component
+  local -a components
+  [[ -n $value && $value != /* && $value != '~'* && $value != *$'\n'* ]] \
+    || die "$name must be a non-empty path relative to the user's home directory."
+  IFS='/' read -r -a components <<< "$value"
+  for component in "${components[@]}"; do
+    [[ -n $component && $component != . && $component != .. \
+      && $component =~ ^[a-zA-Z0-9._-]+$ ]] \
+      || die "$name contains an unsafe path component: $component"
+  done
+}
+
 validate_config() {
   local mode=${1:-runtime}
   local boolean
@@ -118,6 +157,10 @@ validate_config() {
   [[ $AUR_HELPER == paru ]] || die "Only AUR_HELPER=paru is currently supported."
   [[ $AUR_HELPER_PACKAGE == paru || $AUR_HELPER_PACKAGE == paru-bin ]] \
     || die "AUR_HELPER_PACKAGE must be paru or paru-bin."
+  validate_home_relative_path ONEDRIVE_SYNC_DIR
+  validate_simple_name_list ONEDRIVE_LINK_DIRS
+  [[ $GITHUB_GIT_PROTOCOL == https || $GITHUB_GIT_PROTOCOL == ssh ]] \
+    || die "GITHUB_GIT_PROTOCOL must be https or ssh."
   [[ $TPM_PCRS =~ ^[0-9]+([+][0-9]+)*$ ]] || die "TPM_PCRS must look like 7 or 7+11."
   [[ $TPM_PIN_MIN_LENGTH =~ ^[0-9]+$ ]] || die "TPM_PIN_MIN_LENGTH must be an integer."
   ((TPM_PIN_MIN_LENGTH >= 4 && TPM_PIN_MIN_LENGTH <= 64)) || die "TPM_PIN_MIN_LENGTH must be between 4 and 64."
@@ -130,7 +173,10 @@ validate_config() {
     ENABLE_MULTILIB ENABLE_SSD_TRIM ENABLE_AUR AUR_NONINTERACTIVE PROVISION_NONINTERACTIVE \
     ENABLE_DOCKER DOCKER_ADD_USER_TO_GROUP ENABLE_GAMING ENABLE_SNAPSHOTS ENABLE_T480 \
     ENABLE_POWERSHELL_PROFILE INSTALL_POWERSHELL_MODULES INSTALL_VSCODE_EXTENSIONS \
-    ENABLE_BLUETOOTH ENABLE_SSH ENABLE_SECURE_BOOT REQUIRE_SETUP_MODE_AT_INSTALL \
+    ENABLE_BLUETOOTH ENABLE_SSH ENABLE_ONEDRIVE ONEDRIVE_SKIP_DOTFILES \
+    ONEDRIVE_SKIP_SYMLINKS ONEDRIVE_USE_RECYCLE_BIN ONEDRIVE_ENABLE_SERVICE \
+    ENABLE_FIRST_LOGIN_AUTH AUTH_GITHUB_CLI AUTH_ONEDRIVE AUTH_VSCODE AUTH_EDGE AUTH_STEAM \
+    ENABLE_SECURE_BOOT REQUIRE_SETUP_MODE_AT_INSTALL \
     AUTO_PREPARE_SECURE_BOOT SBCTL_ENROLL_MICROSOFT ENABLE_TPM REQUIRE_TPM TPM_WITH_PIN \
     TPM_PIN_NUMERIC_ONLY STAGE_TPM_CREDENTIALS T480_BATTERY_THRESHOLDS \
     NONINTERACTIVE ALLOW_NON_ARCHISO; do
@@ -161,6 +207,12 @@ validate_config() {
   if bool_true "$STAGE_TPM_CREDENTIALS" && ! bool_true "$ENABLE_TPM"; then
     die "STAGE_TPM_CREDENTIALS=true requires ENABLE_TPM=true."
   fi
+  if bool_true "$ENABLE_ONEDRIVE" && ! bool_true "$ENABLE_AUR"; then
+    die "ENABLE_ONEDRIVE=true requires ENABLE_AUR=true for onedrive-abraunegg."
+  fi
+  if bool_true "$AUTH_ONEDRIVE" && ! bool_true "$ENABLE_ONEDRIVE"; then
+    die "AUTH_ONEDRIVE=true requires ENABLE_ONEDRIVE=true."
+  fi
   if ! bool_true "$ENABLE_AUR" && \
     { bool_true "$ENABLE_POWERSHELL_PROFILE" || bool_true "$INSTALL_VSCODE_EXTENSIONS"; }; then
     die "PowerShell profile or VS Code extension setup requires ENABLE_AUR=true with the configured binary packages."
@@ -185,5 +237,7 @@ SSD TRIM       : $ENABLE_SSD_TRIM
 Docker/gaming  : $ENABLE_DOCKER / $ENABLE_GAMING
 AUR bootstrap  : $AUR_HELPER_PACKAGE (non-interactive: $AUR_NONINTERACTIVE)
 SSH server     : $ENABLE_SSH
+OneDrive       : $ENABLE_ONEDRIVE ($ONEDRIVE_SYNC_DIR; links: $ONEDRIVE_LINK_DIRS)
+First-login auth: $ENABLE_FIRST_LOGIN_AUTH (GitHub: $AUTH_GITHUB_CLI, OneDrive: $AUTH_ONEDRIVE, VS Code: $AUTH_VSCODE, Edge: $AUTH_EDGE, Steam: $AUTH_STEAM)
 EOF
 }
