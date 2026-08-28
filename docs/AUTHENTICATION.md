@@ -18,7 +18,7 @@ The wizard supports:
 
 - Microsoft Edge first-run preparation before any browser OAuth link is opened;
 - GitHub CLI browser authentication and Git credential-helper setup;
-- OneDrive browser OAuth followed by a background dry-run, initial sync, safe folder linking, and user service enablement;
+- OneDrive browser OAuth followed by a real initial sync, safe folder linking, and user service enablement;
 - opening Visual Studio Code for Settings Sync sign-in;
 - opening Microsoft Edge for profile sync sign-in;
 - opening Steam for account sign-in.
@@ -118,6 +118,7 @@ separate backup for important data.
 
 ```bash
 ENABLE_ONEDRIVE=true
+ONEDRIVE_PROFILES=""
 ONEDRIVE_SYNC_DIR="OneDrive"
 ONEDRIVE_LINK_DIRS="Documents Pictures Videos"
 ONEDRIVE_SKIP_DOTFILES=true
@@ -139,6 +140,9 @@ EDGE_PREPARE_BEFORE_OAUTH=true
 
 `ONEDRIVE_SYNC_DIR` is deliberately restricted to a path relative to the user's
 home directory. `ONEDRIVE_LINK_DIRS` accepts simple top-level directory names.
+Set `ONEDRIVE_PROFILES` to add multiple accounts using `name:sync-dir:link1,link2`
+entries, for example `personal:OneDrive:Documents,Pictures work:OneDrive-Work:`.
+When `ONEDRIVE_PROFILES` is empty, the legacy single-profile variables remain in use.
 
 ## Upstream documentation
 

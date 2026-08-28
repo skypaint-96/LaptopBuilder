@@ -134,17 +134,21 @@ EOF_EDGE
 }
 
 print_onedrive_background_status() {
-  if onedrive_bootstrap_complete; then
-    printf '[ OK ] OneDrive initial synchronisation and folder linking are complete.\n'
-  elif onedrive_bootstrap_active; then
-    printf '[ .. ] OneDrive initial synchronisation is running in the background.\n'
-  elif onedrive_bootstrap_failed; then
-    printf '[FAIL] OneDrive initial synchronisation needs attention.\n'
-  elif onedrive_authenticated; then
-    printf '[ .. ] OneDrive is authenticated but initial synchronisation has not started.\n'
-  else
-    printf '[ .. ] OneDrive is not authenticated.\n'
-  fi
+  local profile sync_dir link_dirs
+  while IFS=$'\t' read -r profile sync_dir link_dirs; do
+    set_onedrive_profile "$profile" "$sync_dir" "$link_dirs"
+    if onedrive_bootstrap_complete; then
+      printf '[ OK ] OneDrive profile %s initial synchronisation and folder linking are complete.\n' "$profile"
+    elif onedrive_bootstrap_active; then
+      printf '[ .. ] OneDrive profile %s initial synchronisation is running in the background.\n' "$profile"
+    elif onedrive_bootstrap_failed; then
+      printf '[FAIL] OneDrive profile %s initial synchronisation needs attention.\n' "$profile"
+    elif onedrive_authenticated; then
+      printf '[ .. ] OneDrive profile %s is authenticated but initial synchronisation has not started.\n' "$profile"
+    else
+      printf '[ .. ] OneDrive profile %s is not authenticated.\n' "$profile"
+    fi
+  done < <(onedrive_profile_specs)
 
   if systemctl --user list-unit-files "$ONEDRIVE_BOOTSTRAP_UNIT" --no-legend 2>/dev/null | grep -q .; then
     systemctl --user --no-pager --full status "$ONEDRIVE_BOOTSTRAP_UNIT" 2>/dev/null || true
@@ -158,6 +162,47 @@ follow_onedrive_logs() {
   command -v journalctl >/dev/null 2>&1 || die 'journalctl is unavailable.'
   echo 'Following OneDrive initial-sync logs. Press Ctrl+C to stop viewing.'
   exec journalctl --user -u "$ONEDRIVE_BOOTSTRAP_UNIT" -f --no-pager
+}
+
+authenticate_onedrive_profile() {
+  local profile=$1 sync_dir=$2 link_dirs=$3 service_name=onedrive.service
+  set_onedrive_profile "$profile" "$sync_dir" "$link_dirs"
+  [[ $profile == default ]] || service_name="onedrive@$profile.service"
+  mkdir -p "$ONEDRIVE_CONFIG_DIR"
+  chmod 0700 "$ONEDRIVE_CONFIG_DIR"
+
+  if ! onedrive_authenticated; then
+    prepare_edge_for_oauth || return 1
+    ask "Authenticate OneDrive profile '$profile' using the browser now?" yes || return 1
+    onedrive --confdir="$ONEDRIVE_CONFIG_DIR"
+  fi
+  onedrive_authenticated || { warn "OneDrive profile '$profile' authentication did not create a refresh token."; return 1; }
+  success "OneDrive profile '$profile' authentication material is present."
+
+  if onedrive_links_ready; then
+    success "OneDrive profile '$profile' home-folder links are already configured."
+    if bool_true "$ONEDRIVE_ENABLE_SERVICE"; then
+      systemctl --user enable --now "$service_name"
+    fi
+    return 0
+  fi
+
+  if onedrive_bootstrap_active; then
+    success "OneDrive profile '$profile' initial synchronisation is already running in the background."
+    echo "Monitor it with: archctl auth onedrive-status"
+    return 0
+  fi
+
+  ask "Start the real initial OneDrive sync for profile '$profile' and link ${link_dirs:-no home folders}?" yes || {
+    warn "OneDrive profile '$profile' is authenticated, but initial synchronisation was deferred."
+    return 1
+  }
+
+  if bool_true "$ONEDRIVE_INITIAL_SYNC_BACKGROUND"; then
+    start_onedrive_background_bootstrap "$profile"
+  else
+    /usr/local/bin/arch-workstation-onedrive-bootstrap "$profile"
+  fi
 }
 
 print_auth_status() {
@@ -182,20 +227,24 @@ print_auth_status() {
   fi
 
   if bool_true "$AUTH_ONEDRIVE"; then
-    if onedrive_authenticated; then
-      printf '[ OK ] OneDrive has a local OAuth refresh token.\n'
-    else
-      printf '[ .. ] OneDrive is not authenticated.\n'
-      ((failures += 1))
-    fi
-    if onedrive_bootstrap_complete; then
-      printf '[ OK ] OneDrive initial sync and home-folder links are complete.\n'
-    elif onedrive_bootstrap_active; then
-      printf '[ .. ] OneDrive initial sync is running in the background.\n'
-    else
-      printf '[ .. ] OneDrive initial sync and home-folder links are incomplete.\n'
-      ((failures += 1))
-    fi
+    local profile sync_dir link_dirs
+    while IFS=$'\t' read -r profile sync_dir link_dirs; do
+      set_onedrive_profile "$profile" "$sync_dir" "$link_dirs"
+      if onedrive_authenticated; then
+        printf '[ OK ] OneDrive profile %s has a local OAuth refresh token.\n' "$profile"
+      else
+        printf '[ .. ] OneDrive profile %s is not authenticated.\n' "$profile"
+        ((failures += 1))
+      fi
+      if onedrive_bootstrap_complete; then
+        printf '[ OK ] OneDrive profile %s initial sync and home-folder links are complete.\n' "$profile"
+      elif onedrive_bootstrap_active; then
+        printf '[ .. ] OneDrive profile %s initial sync is running in the background.\n' "$profile"
+      else
+        printf '[ .. ] OneDrive profile %s initial sync and home-folder links are incomplete.\n' "$profile"
+        ((failures += 1))
+      fi
+    done < <(onedrive_profile_specs)
   fi
 
   if bool_true "$AUTH_VSCODE"; then
@@ -232,6 +281,7 @@ authenticate_github() {
 }
 
 start_onedrive_background_bootstrap() {
+  local profile=${1:-default}
   systemctl --user daemon-reload
   if onedrive_bootstrap_active; then
     success 'OneDrive initial synchronisation is already running in the background.'
@@ -244,7 +294,7 @@ start_onedrive_background_bootstrap() {
 
   systemctl --user reset-failed "$ONEDRIVE_BOOTSTRAP_UNIT" >/dev/null 2>&1 || true
   rm -f "$ONEDRIVE_FAILED_MARKER"
-  systemctl --user start --no-block "$ONEDRIVE_BOOTSTRAP_UNIT"
+  systemctl --user start --no-block "$ONEDRIVE_BOOTSTRAP_UNIT" "$profile"
   sleep 1
   if onedrive_bootstrap_failed; then
     warn 'The OneDrive background service failed to start.'
@@ -262,41 +312,11 @@ EOF_STATUS
 
 authenticate_onedrive() {
   command -v onedrive >/dev/null 2>&1 || { warn 'OneDrive is not installed; run archctl apply first.'; return 1; }
-  mkdir -p "$HOME/.config/onedrive"
-  chmod 0700 "$HOME/.config/onedrive"
-
-  if ! onedrive_authenticated; then
-    prepare_edge_for_oauth || return 1
-    ask 'Authenticate the OneDrive client using the browser now?' yes || return 1
-    onedrive
-  fi
-  onedrive_authenticated || { warn 'OneDrive authentication did not create a refresh token.'; return 1; }
-  success 'OneDrive authentication material is present in the local user configuration.'
-
-  if onedrive_links_ready; then
-    success 'OneDrive home-folder links are already configured.'
-    if bool_true "$ONEDRIVE_ENABLE_SERVICE"; then
-      systemctl --user enable --now onedrive.service
-    fi
-    return 0
-  fi
-
-  if onedrive_bootstrap_active; then
-    success 'OneDrive initial synchronisation is already running in the background.'
-    echo "Monitor it with: archctl auth onedrive-status"
-    return 0
-  fi
-
-  ask "Start the initial OneDrive sync and link $ONEDRIVE_LINK_DIRS?" yes || {
-    warn 'OneDrive is authenticated, but initial synchronisation was deferred.'
-    return 1
-  }
-
-  if bool_true "$ONEDRIVE_INITIAL_SYNC_BACKGROUND"; then
-    start_onedrive_background_bootstrap
-  else
-    /usr/local/bin/arch-workstation-onedrive-bootstrap
-  fi
+  local profile sync_dir link_dirs failures=0
+  while IFS=$'\t' read -r profile sync_dir link_dirs; do
+    authenticate_onedrive_profile "$profile" "$sync_dir" "$link_dirs" || ((failures += 1))
+  done < <(onedrive_profile_specs)
+  ((failures == 0))
 }
 
 launch_gui_auth() {

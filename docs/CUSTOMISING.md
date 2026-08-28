@@ -24,6 +24,7 @@ Important switches include:
 | `ENABLE_SSH` | Installs, enables, and starts the OpenSSH server; true by default |
 | `ENABLE_ONEDRIVE` | Installs the maintained OneDrive client and managed per-user configuration |
 | `ONEDRIVE_SYNC_DIR` | Home-relative OneDrive sync root, default `OneDrive` |
+| `ONEDRIVE_PROFILES` | Optional multi-account OneDrive profiles as `name:sync-dir:link1,link2` entries |
 | `ONEDRIVE_LINK_DIRS` | Home folders linked after a successful initial sync |
 | `ENABLE_FIRST_LOGIN_AUTH` | Offers supported application sign-ins once after setup completes |
 | `TPM_PCRS` | Selects the systemd TPM PCR binding |

@@ -5,20 +5,79 @@ ONEDRIVE_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/arch-workstation/onedr
 ONEDRIVE_COMPLETE_MARKER="$ONEDRIVE_STATE_DIR/bootstrap-complete"
 ONEDRIVE_FAILED_MARKER="$ONEDRIVE_STATE_DIR/bootstrap-failed"
 ONEDRIVE_BACKUP_ROOT_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/arch-workstation/folder-backups"
+ONEDRIVE_PROFILE_NAME=default
+ONEDRIVE_CONFIG_DIR="$HOME/.config/onedrive"
+ONEDRIVE_PROFILE_SYNC_DIR=${ONEDRIVE_SYNC_DIR:-OneDrive}
+ONEDRIVE_PROFILE_LINK_DIRS=${ONEDRIVE_LINK_DIRS:-}
+
+onedrive_profile_confdir() {
+  local profile=$1
+  if [[ $profile == default ]]; then
+    printf '%s\n' "$HOME/.config/onedrive"
+  else
+    printf '%s\n' "$HOME/.config/onedrive-%s" "$profile"
+  fi
+}
+
+set_onedrive_profile() {
+  ONEDRIVE_PROFILE_NAME=$1
+  ONEDRIVE_PROFILE_SYNC_DIR=$2
+  ONEDRIVE_PROFILE_LINK_DIRS=$3
+  ONEDRIVE_CONFIG_DIR=$(onedrive_profile_confdir "$ONEDRIVE_PROFILE_NAME")
+  ONEDRIVE_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/arch-workstation/onedrive/$ONEDRIVE_PROFILE_NAME"
+  ONEDRIVE_COMPLETE_MARKER="$ONEDRIVE_STATE_DIR/bootstrap-complete"
+  ONEDRIVE_FAILED_MARKER="$ONEDRIVE_STATE_DIR/bootstrap-failed"
+}
+
+onedrive_profile_specs() {
+  local profile name sync_dir link_csv links
+  if [[ -n ${ONEDRIVE_PROFILES:-} ]]; then
+    for profile in $ONEDRIVE_PROFILES; do
+      IFS=':' read -r name sync_dir link_csv <<< "$profile"
+      links=${link_csv//,/ }
+      [[ -n ${links// /} ]] || links=''
+      printf '%s\t%s\t%s\n' "$name" "$sync_dir" "$links"
+    done
+  else
+    printf 'default\t%s\t%s\n' "$ONEDRIVE_SYNC_DIR" "$ONEDRIVE_LINK_DIRS"
+  fi
+}
+
+onedrive_profile_count() {
+  local count=0 profile
+  while IFS=$'\t' read -r profile _; do
+    [[ -n $profile ]] && ((count += 1))
+  done < <(onedrive_profile_specs)
+  printf '%s\n' "$count"
+}
 
 initialise_onedrive_state() {
   mkdir -p "$ONEDRIVE_STATE_DIR" "$ONEDRIVE_BACKUP_ROOT_BASE"
   chmod 0700 "$ONEDRIVE_STATE_DIR" "$ONEDRIVE_BACKUP_ROOT_BASE"
 }
 
+write_onedrive_profile_config() {
+  mkdir -p "$ONEDRIVE_CONFIG_DIR"
+  chmod 0700 "$ONEDRIVE_CONFIG_DIR"
+  cat > "$ONEDRIVE_CONFIG_DIR/config" <<EOF_ONEDRIVE_CONFIG
+# Managed by arch-workstation. Authentication tokens are stored separately by
+# the OneDrive client in this user's private configuration directory.
+sync_dir = "~/$ONEDRIVE_PROFILE_SYNC_DIR"
+skip_dotfiles = "${ONEDRIVE_SKIP_DOTFILES:-true}"
+skip_symlinks = "${ONEDRIVE_SKIP_SYMLINKS:-true}"
+use_recycle_bin = "${ONEDRIVE_USE_RECYCLE_BIN:-true}"
+EOF_ONEDRIVE_CONFIG
+  chmod 0600 "$ONEDRIVE_CONFIG_DIR/config"
+}
+
 onedrive_authenticated() {
-  [[ -s $HOME/.config/onedrive/refresh_token ]]
+  [[ -s $ONEDRIVE_CONFIG_DIR/refresh_token ]]
 }
 
 onedrive_links_ready() {
-  local sync_root="$HOME/$ONEDRIVE_SYNC_DIR" name source target
+  local sync_root="$HOME/$ONEDRIVE_PROFILE_SYNC_DIR" name source target
   local -a names
-  read -r -a names <<< "$ONEDRIVE_LINK_DIRS"
+  read -r -a names <<< "$ONEDRIVE_PROFILE_LINK_DIRS"
   for name in "${names[@]}"; do
     source="$HOME/$name"
     target="$sync_root/$name"
@@ -78,13 +137,13 @@ migrate_onedrive_link() {
 }
 
 configure_onedrive_links() {
-  local sync_root="$HOME/$ONEDRIVE_SYNC_DIR"
+  local sync_root="$HOME/$ONEDRIVE_PROFILE_SYNC_DIR"
   local backup_root="$ONEDRIVE_BACKUP_ROOT_BASE/$(date +'%Y%m%d-%H%M%S')"
   local name failures=0
   local -a names
 
   mkdir -p "$sync_root"
-  read -r -a names <<< "$ONEDRIVE_LINK_DIRS"
+  read -r -a names <<< "$ONEDRIVE_PROFILE_LINK_DIRS"
   for name in "${names[@]}"; do
     migrate_onedrive_link "$name" "$sync_root" "$backup_root" || ((failures += 1))
   done

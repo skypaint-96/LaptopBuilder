@@ -16,6 +16,7 @@ default_archive_manager: file-roller
 default_media_player: mpv
 default_pdf_viewer: edge
 enable_onedrive: true
+onedrive_profiles: []
 onedrive_sync_dir: OneDrive
 onedrive_link_dirs: Documents Pictures Videos
 onedrive_skip_dotfiles: true

@@ -162,7 +162,10 @@ append_config_package() {
 }
 set_config_value AUR_HELPER_PACKAGE 'AUR_HELPER_PACKAGE="paru"'
 append_config_package AUR_PACKAGES onedrive-abraunegg
+append_config_package AUR_PACKAGES omnissa-horizon-client
+append_config_package AUR_PACKAGES vyprvpn
 ensure_config_value ENABLE_ONEDRIVE 'ENABLE_ONEDRIVE=true'
+ensure_config_value ONEDRIVE_PROFILES 'ONEDRIVE_PROFILES=""'
 ensure_config_value ONEDRIVE_SYNC_DIR 'ONEDRIVE_SYNC_DIR="OneDrive"'
 ensure_config_value ONEDRIVE_LINK_DIRS 'ONEDRIVE_LINK_DIRS="Documents Pictures Videos"'
 ensure_config_value ONEDRIVE_SKIP_DOTFILES 'ONEDRIVE_SKIP_DOTFILES=true'

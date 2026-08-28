@@ -20,7 +20,8 @@ bool_true "$ENABLE_ONEDRIVE" || die 'OneDrive is disabled in the workstation con
 
 initialise_onedrive_state
 BOOTSTRAP_SUCCEEDED=false
-exec 9>"$ONEDRIVE_STATE_DIR/bootstrap.lock"
+PROFILE_ARG=${1:-}
+exec 9>"${XDG_STATE_HOME:-$HOME/.local/state}/arch-workstation/onedrive-bootstrap.lock"
 flock -n 9 || die 'Another OneDrive bootstrap process is already running.'
 
 bootstrap_exit() {
@@ -34,32 +35,49 @@ bootstrap_exit() {
 }
 trap bootstrap_exit EXIT
 
-onedrive_authenticated || die 'OneDrive is not authenticated. Run: archctl auth onedrive'
-rm -f "$ONEDRIVE_FAILED_MARKER"
+bootstrap_profile() {
+  local profile=$1 sync_dir=$2 link_dirs=$3 service_name=onedrive.service
+  set_onedrive_profile "$profile" "$sync_dir" "$link_dirs"
+  initialise_onedrive_state
+  if [[ $profile != default ]]; then
+    service_name="onedrive@$profile.service"
+  fi
+  write_onedrive_profile_config
 
-# Prevent the normal monitor service racing the one-time initial transaction.
-systemctl --user stop onedrive.service >/dev/null 2>&1 || true
+  onedrive_authenticated || die "OneDrive profile '$profile' is not authenticated. Run: archctl auth onedrive"
+  rm -f "$ONEDRIVE_FAILED_MARKER"
 
-info 'Displaying the effective OneDrive configuration.'
-onedrive --display-config
-info 'Running a non-destructive OneDrive dry run in the background service.'
-onedrive --sync --verbose --dry-run
-info 'Running the initial OneDrive synchronisation.'
-onedrive --sync --verbose
+  # Prevent the normal monitor service racing the one-time initial transaction.
+  systemctl --user stop "$service_name" >/dev/null 2>&1 || true
 
-configure_onedrive_links || die 'One or more home folders could not be linked safely.'
+  info "Displaying the effective OneDrive configuration for profile '$profile'."
+  onedrive --confdir="$ONEDRIVE_CONFIG_DIR" --display-config
+  info "Running the initial real OneDrive synchronisation for profile '$profile'."
+  onedrive --confdir="$ONEDRIVE_CONFIG_DIR" --sync --verbose
 
-# Upload any non-conflicting files copied from the original local folders.
-info 'Synchronising files merged from the original local folders.'
-onedrive --sync --verbose
+  if [[ -n $link_dirs ]]; then
+    configure_onedrive_links || die "One or more home folders could not be linked safely for OneDrive profile '$profile'."
+  fi
 
-if bool_true "$ONEDRIVE_ENABLE_SERVICE"; then
-  systemctl --user enable --now onedrive.service
-fi
+  # Upload any non-conflicting files copied from the original local folders.
+  if [[ -n $link_dirs ]]; then
+    info "Synchronising files merged from the original local folders for profile '$profile'."
+    onedrive --confdir="$ONEDRIVE_CONFIG_DIR" --sync --verbose
+  fi
 
-printf '%s\n' "$(date --iso-8601=seconds)" > "$ONEDRIVE_COMPLETE_MARKER"
-chmod 0600 "$ONEDRIVE_COMPLETE_MARKER"
-rm -f "$ONEDRIVE_FAILED_MARKER"
+  if bool_true "$ONEDRIVE_ENABLE_SERVICE"; then
+    systemctl --user enable --now "$service_name"
+  fi
+
+  printf '%s\n' "$(date --iso-8601=seconds)" > "$ONEDRIVE_COMPLETE_MARKER"
+  chmod 0600 "$ONEDRIVE_COMPLETE_MARKER"
+  rm -f "$ONEDRIVE_FAILED_MARKER"
+}
+
+while IFS=$'\t' read -r profile sync_dir link_dirs; do
+  [[ -z $PROFILE_ARG || $PROFILE_ARG == "$profile" ]] || continue
+  bootstrap_profile "$profile" "$sync_dir" "$link_dirs"
+done < <(onedrive_profile_specs)
 BOOTSTRAP_SUCCEEDED=true
 success 'OneDrive initial synchronisation and folder linking completed.'
 notify_onedrive normal 'OneDrive setup complete' \

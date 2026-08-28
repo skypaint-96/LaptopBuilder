@@ -123,6 +123,8 @@ microsoft-edge-stable-bin
 visual-studio-code-bin
 powershell-bin
 onedrive-abraunegg
+omnissa-horizon-client
+vyprvpn
 ```
 
 The default helper bootstrap builds `paru` from source against the currently installed pacman/libalpm ABI. It installs the explicit `rust` provider before invoking makepkg, so no Cargo-provider menu appears. `AUR_NONINTERACTIVE=true` installs only the configured allow-list with routine review prompts suppressed. Set it to `false` to print and confirm the helper build and retain Paru's review workflow. These packages are not built or supported by Arch Linux itself.

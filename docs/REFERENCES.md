@@ -45,5 +45,7 @@ Reviewed for version 0.3.6 on 2026-08-04. Upstream documentation changes over ti
 
 - Paru source AUR package: https://aur.archlinux.org/packages/paru
 - OneDrive client AUR package: https://aur.archlinux.org/packages/onedrive-abraunegg
+- Omnissa Horizon Client AUR package: https://aur.archlinux.org/packages/omnissa-horizon-client
+- VyprVPN AUR package: https://aur.archlinux.org/packages/vyprvpn
 - OneDrive usage: https://github.com/abraunegg/onedrive/blob/master/docs/usage.md
 - GitHub CLI authentication: https://cli.github.com/manual/gh_auth_login

@@ -30,7 +30,7 @@ AUR_HELPER="paru"
 # Build Paru from source against the installed pacman/libalpm ABI. The bootstrap
 # installs the explicit rust provider first, so no Cargo-provider prompt appears.
 AUR_HELPER_PACKAGE="paru"
-AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin onedrive-abraunegg"
+AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin onedrive-abraunegg omnissa-horizon-client vyprvpn"
 # Automated mode trusts only the explicit allow-list above and skips routine
 # PKGBUILD/rebuild prompts. Set false when you want to review every AUR build.
 AUR_NONINTERACTIVE=true
@@ -67,6 +67,9 @@ DEFAULT_PDF_VIEWER="edge"
 # Cloud sync and first-login authentication. Tokens remain in each application's
 # normal per-user credential store and are never copied into Git or the USB.
 ENABLE_ONEDRIVE=true
+# Optional multi-account format: profile:sync-dir:linked,folders. Leave empty to use the legacy single profile below.
+# Example: ONEDRIVE_PROFILES="personal:OneDrive:Documents,Pictures,Videos work:OneDrive-Work:"
+ONEDRIVE_PROFILES=""
 # Relative to the configured user's home directory.
 ONEDRIVE_SYNC_DIR="OneDrive"
 # These home folders are linked to matching directories under ONEDRIVE_SYNC_DIR
@@ -77,7 +80,7 @@ ONEDRIVE_SKIP_SYMLINKS=true
 ONEDRIVE_USE_RECYCLE_BIN=true
 ONEDRIVE_ENABLE_SERVICE=true
 # Keep the interactive OAuth step in the foreground, then queue the potentially
-# long dry-run, initial sync, folder migration, and service enablement in systemd.
+# long real initial sync, folder migration, and service enablement in systemd.
 ONEDRIVE_INITIAL_SYNC_BACKGROUND=true
 ONEDRIVE_NOTIFY_ON_COMPLETION=true
 

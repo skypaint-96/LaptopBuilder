@@ -31,6 +31,7 @@ bool_true "$MANAGE_DEFAULT_APPLICATIONS"
 [[ $DEFAULT_MEDIA_PLAYER == mpv ]]
 bool_true "$ENABLE_ONEDRIVE"
 [[ $ONEDRIVE_SYNC_DIR == OneDrive ]]
+[[ -z $ONEDRIVE_PROFILES ]]
 [[ $ONEDRIVE_LINK_DIRS == 'Documents Pictures Videos' ]]
 bool_true "$ENABLE_FIRST_LOGIN_AUTH"
 bool_true "$AUTH_GITHUB_CLI"

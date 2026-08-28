@@ -15,7 +15,39 @@
     owner: "{{ arch_user }}"
     group: "{{ arch_user }}"
     mode: '0600'
+  when:
+    - enable_onedrive | bool
+    - (onedrive_profiles | default([]) | length) == 0
+
+- name: Ensure configured OneDrive profile directories exist
+  ansible.builtin.file:
+    path: "/home/{{ arch_user }}/.config/onedrive-{{ item.name }}"
+    state: directory
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0700'
+  loop: "{{ onedrive_profiles | default([]) }}"
   when: enable_onedrive | bool
+
+- name: Install managed OneDrive profile configurations
+  ansible.builtin.template:
+    src: onedrive-config.j2
+    dest: "/home/{{ arch_user }}/.config/onedrive-{{ item.name }}/config"
+    owner: "{{ arch_user }}"
+    group: "{{ arch_user }}"
+    mode: '0600'
+  vars:
+    onedrive_sync_dir: "{{ item.sync_dir }}"
+  loop: "{{ onedrive_profiles | default([]) }}"
+  when: enable_onedrive | bool
+
+- name: Remove legacy OneDrive profile configuration when explicit profiles are configured
+  ansible.builtin.file:
+    path: "/home/{{ arch_user }}/.config/onedrive/config"
+    state: absent
+  when:
+    - enable_onedrive | bool
+    - (onedrive_profiles | default([]) | length) > 0
 
 
 - name: Install the OneDrive bootstrap helper

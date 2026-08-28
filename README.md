@@ -42,7 +42,8 @@ The project treats the operating system as rebuildable configuration. It creates
 | Docker | `docker`, Buildx, and Compose |
 | Git | `git` |
 | Steam | `steam`, GameMode, MangoHud, and explicit 32-bit Vulkan userspace |
-| OneDrive | `onedrive-abraunegg` from AUR with managed config and user service |
+| OneDrive | `onedrive-abraunegg` from AUR with managed config, multi-profile bootstrap support, and user service |
+| Remote access/VPN | Omnissa Horizon Client and VyprVPN from the configured AUR allow-list |
 | GitHub CLI | `github-cli` from official repositories |
 
 ## Build the installation USB

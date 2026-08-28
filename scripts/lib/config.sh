@@ -20,7 +20,7 @@ set_config_defaults() {
   ENABLE_AUR=true
   AUR_HELPER="paru"
   AUR_HELPER_PACKAGE="paru"
-  AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin onedrive-abraunegg"
+  AUR_PACKAGES="microsoft-edge-stable-bin visual-studio-code-bin powershell-bin onedrive-abraunegg omnissa-horizon-client vyprvpn"
   AUR_NONINTERACTIVE=true
   PROVISION_NONINTERACTIVE=true
 
@@ -48,6 +48,9 @@ set_config_defaults() {
   DEFAULT_PDF_VIEWER="edge"
 
   ENABLE_ONEDRIVE=true
+  # Optional multi-account format: name:sync-dir:link1,link2 name2:sync-dir:
+  # The legacy ONEDRIVE_SYNC_DIR and ONEDRIVE_LINK_DIRS values are used when empty.
+  ONEDRIVE_PROFILES=""
   ONEDRIVE_SYNC_DIR="OneDrive"
   ONEDRIVE_LINK_DIRS="Documents Pictures Videos"
   ONEDRIVE_SKIP_DOTFILES=true
@@ -131,10 +134,35 @@ validate_simple_name_list() {
 }
 
 validate_home_relative_path() {
-  local name=$1 value=${!1} component
+  local name=$1
+  validate_home_relative_path_value "$name" "${!1}"
+}
+
+validate_onedrive_profiles() {
+  local profile name sync_dir link_csv link
+  local -a profiles links
+  [[ -n $ONEDRIVE_PROFILES ]] || return 0
+  read -r -a profiles <<< "$ONEDRIVE_PROFILES"
+  for profile in "${profiles[@]}"; do
+    IFS=':' read -r name sync_dir link_csv <<< "$profile"
+    [[ $name =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ && $name != -* ]] \
+      || die "ONEDRIVE_PROFILES contains an invalid profile name: $name"
+    [[ -n $sync_dir ]] || die "ONEDRIVE_PROFILES profile '$name' must include a sync directory."
+    validate_home_relative_path_value ONEDRIVE_PROFILES "$sync_dir"
+    [[ -n ${link_csv:-} ]] || continue
+    IFS=',' read -r -a links <<< "$link_csv"
+    for link in "${links[@]}"; do
+      [[ $link =~ ^[a-zA-Z0-9._-]+$ && $link != .* && $link != -* ]] \
+        || die "ONEDRIVE_PROFILES profile '$name' contains an invalid link directory: $link"
+    done
+  done
+}
+
+validate_home_relative_path_value() {
+  local name=$1 value=$2 component
   local -a components
   [[ -n $value && $value != /* && $value != '~'* && $value != *$'\n'* ]] \
-    || die "$name must be a non-empty path relative to the user's home directory."
+    || die "$name must contain non-empty paths relative to the user's home directory."
   IFS='/' read -r -a components <<< "$value"
   for component in "${components[@]}"; do
     [[ -n $component && $component != . && $component != .. \
@@ -174,6 +202,7 @@ validate_config() {
     || die "AUR_HELPER_PACKAGE must be paru or paru-bin."
   validate_home_relative_path ONEDRIVE_SYNC_DIR
   validate_simple_name_list ONEDRIVE_LINK_DIRS
+  validate_onedrive_profiles
   [[ $GITHUB_GIT_PROTOCOL == https || $GITHUB_GIT_PROTOCOL == ssh ]] \
     || die "GITHUB_GIT_PROTOCOL must be https or ssh."
   [[ $DEFAULT_BROWSER == edge ]] || die "DEFAULT_BROWSER currently supports only edge."

@@ -91,13 +91,15 @@ grep -q 'Apply the OpenSSH server policy' ansible/roles/common/tasks/main.yml
 grep -q 'apply|provision' archctl
 grep -q 'auth)' archctl
 grep -q 'onedrive-abraunegg' config/install.conf.example
+grep -q 'omnissa-horizon-client' config/install.conf.example
+grep -q 'vyprvpn' config/install.conf.example
 grep -q 'ONEDRIVE_LINK_DIRS="Documents Pictures Videos"' config/install.conf.example
 grep -q 'arch-workstation-auth.desktop' ansible/roles/cloud/tasks/main.yml
 grep -q 'arch-workstation-onedrive-bootstrap.service' ansible/roles/cloud/tasks/main.yml
 grep -q 'ONEDRIVE_INITIAL_SYNC_BACKGROUND=true' config/install.conf.example
 grep -q 'EDGE_PREPARE_BEFORE_OAUTH=true' config/install.conf.example
 grep -q 'systemctl --user start --no-block' scripts/auth.sh
-grep -q 'onedrive --sync --verbose --dry-run' scripts/onedrive-bootstrap.sh
+grep -q 'onedrive --confdir="\$ONEDRIVE_CONFIG_DIR" --sync --verbose' scripts/onedrive-bootstrap.sh
 grep -q 'libnotify' ansible/roles/desktop/tasks/main.yml
 grep -q 'rsync -a --ignore-existing' scripts/lib/onedrive.sh
 grep -q 'refresh_token' scripts/lib/onedrive.sh
