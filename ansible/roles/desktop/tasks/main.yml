@@ -6,6 +6,9 @@
       - --sync
       - --needed
       - --noconfirm
+      - bluez
+      - bluez-utils
+      - blueman
       - file-roller
       - gnome-keyring
       - libnotify
@@ -17,6 +20,12 @@
       - xdg-desktop-portal-gtk
   register: desktop_packages
   changed_when: "'there is nothing to do' not in (desktop_packages.stdout + desktop_packages.stderr) | lower"
+
+- name: Enable Bluetooth
+  ansible.builtin.systemd_service:
+    name: bluetooth.service
+    enabled: true
+    state: started
 
 - name: Ensure graphical login is enabled
   ansible.builtin.systemd_service:
