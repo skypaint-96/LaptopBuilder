@@ -21,7 +21,7 @@ die() { _log ERROR "$@" >&2; exit 1; }
 
 bool_true() {
   case "${1,,}" in
-    1|true|yes|on) return 0 ;;
+    1|true|yes|y|on) return 0 ;;
     *) return 1 ;;
   esac
 }
