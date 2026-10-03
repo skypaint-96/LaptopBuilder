@@ -64,6 +64,8 @@ DEFAULT_ARCHIVE_MANAGER="file-roller"
 DEFAULT_MEDIA_PLAYER="mpv"
 DEFAULT_PDF_VIEWER="edge"
 
+XFCE_TERMINAL_CUSTOM_COMMAND=""
+
 # Cloud sync and first-login authentication. Tokens remain in each application's
 # normal per-user credential store and are never copied into Git or the USB.
 ENABLE_ONEDRIVE=true
