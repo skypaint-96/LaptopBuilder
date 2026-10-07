@@ -131,6 +131,24 @@ vyprvpn
 
 The default helper bootstrap builds `paru` from source against the currently installed pacman/libalpm ABI. It installs the explicit `rust` provider before invoking makepkg, so no Cargo-provider menu appears. `AUR_NONINTERACTIVE=true` installs only the configured allow-list with routine review prompts suppressed. Set it to `false` to print and confirm the helper build and retain Paru's review workflow. These packages are not built or supported by Arch Linux itself.
 
+If a configured AUR package fails during the allow-list installation, inspect the Paru error: the subsequent `-Sua --needed` stage of `archctl update` is not reached. The installed `/etc/arch-installer/install.conf` can differ from this repository's example; check it before assuming which packages were requested. Do not remove a package from the defaults based on an unverified failure.
+
+PowerShell is configured as `powershell-bin`, a distinct AUR package from `powershell` (built from source). Both can provide `pwsh`, but the allow-list does not rename, replace, or remove an existing `powershell` installation. `archctl apply` runs `paru -S --needed` on configured packages, so it skips a package whose installed package version matches the AUR version; `archctl update` also runs `paru -Sua --needed` for installed foreign packages when the allow-list stage succeeds. Neither forces a new upstream release when the AUR package version has not changed. An upstream PowerShell version, the installed package version, and the AUR package version are different things; the PowerShell profile and optional gallery modules are not the PowerShell application package.
+
+On the installed machine, inspect without changing packages:
+
+```bash
+grep '^AUR_PACKAGES=' /etc/arch-installer/install.conf
+pacman -Q powershell powershell-bin   # a missing package produces an error; inspect each result
+command -v pwsh
+pacman -Qo "$(command -v pwsh)"
+pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+paru -Si powershell-bin                # check the AUR package version (network required)
+paru -Qua                             # list pending AUR upgrades without installing
+```
+
+If the configured package and the owner of `pwsh` differ, review the dependency/conflict prompts and migrate manually only if appropriate; never remove a working package merely to force an update. If they match but the upstream version is newer, check whether the AUR package has been updated and whether the update stages completed. `upgrade-existing.sh` preserves the existing machine configuration rather than replacing its AUR package list with the repository example.
+
 CI derives official and AUR package names from the repository configuration. It resolves official packages in a current Arch container and checks AUR names through the metadata API. Those checks detect naming/repository drift, not malicious or defective package contents.
 
 ## Optional PowerShell modules
