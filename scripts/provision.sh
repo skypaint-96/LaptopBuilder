@@ -37,7 +37,7 @@ while (($#)); do
 done
 
 require_non_root
-require_commands ansible-playbook findmnt pacman sudo
+require_commands ansible-playbook findmnt pacman python3 sudo
 [[ -r $CONFIG_FILE ]] || die "Configuration not found: $CONFIG_FILE"
 load_config "$CONFIG_FILE"
 validate_config runtime
@@ -86,6 +86,7 @@ declare -a ansible_args=(
   --extra-vars "default_archive_manager=$DEFAULT_ARCHIVE_MANAGER"
   --extra-vars "default_media_player=$DEFAULT_MEDIA_PLAYER"
   --extra-vars "default_pdf_viewer=$DEFAULT_PDF_VIEWER"
+  --extra-vars "$(terminal_command_extra_vars)"
   --extra-vars "enable_onedrive=$ENABLE_ONEDRIVE"
   --extra-vars "onedrive_profiles=[]"
   --extra-vars "onedrive_sync_dir=$ONEDRIVE_SYNC_DIR"

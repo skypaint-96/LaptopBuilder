@@ -145,6 +145,11 @@ The disk and filesystem scripts are intentionally narrow. Adding dual boot, a se
 ## Default applications
 
 The default application policy is controlled by `MANAGE_DEFAULT_APPLICATIONS` and the `DEFAULT_*` values in `install.conf`. Version 0.3.7 supports the explicit Edge/Thunar/Xfce Terminal/Mousepad/VS Code/Ristretto/File Roller/mpv profile. Apply changes with `archctl apply --skip-upgrade`. The generated user files are `~/.config/mimeapps.list`, `~/.config/xfce4/helpers.rc`, and matching Xfce/Edge helper entries under `~/.local/share`.
+
+### Xfce Terminal custom command
+
+To persist Xfce Terminal's Preferences → General → “Run a custom command instead of my shell”, set `XFCE_TERMINAL_CUSTOM_COMMAND="tmux new-session -A -s work"` in the configuration and run `archctl apply --skip-upgrade` as the configured user. For a fresh checkout, copy `config/install.conf.example` to `config/install.conf` and edit the copy before installing. On an installed or migrated machine, edit `/etc/arch-installer/install.conf` instead; the installed repository's `config/install.conf` links to that file. An older migrated configuration may lack this setting: add it there explicitly to enable the command. If absent or empty, provisioning disables the custom command. Keep the value on one line; shell syntax inside the command is passed through as text (not executed while provisioning). Provisioning manages `~/.config/xfce4/terminal/terminalrc`, so changing only the terminal GUI setting may be overwritten on the next apply.
+
 ### VS Code settings
 
 Edit [`vscode/settings.json`](../vscode/settings.json) for keys managed by this repository. Provisioning merges those top-level keys into the user's VS Code JSONC settings (comments and trailing commas are accepted); managed keys win, unrelated local keys survive repeated runs. The resulting file is formatted as JSON, so existing comments/formatting are not preserved. An invalid settings file causes provisioning to fail without overwriting it. Nested objects under a managed top-level key are replaced as a unit.

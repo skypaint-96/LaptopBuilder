@@ -46,6 +46,7 @@ set_config_defaults() {
   DEFAULT_ARCHIVE_MANAGER="file-roller"
   DEFAULT_MEDIA_PLAYER="mpv"
   DEFAULT_PDF_VIEWER="edge"
+  XFCE_TERMINAL_CUSTOM_COMMAND=""
 
   ENABLE_ONEDRIVE=true
   # Optional multi-account format: name:sync-dir:link1,link2 name2:sync-dir:
@@ -103,6 +104,13 @@ load_config() {
   if [[ -n $DISK && -e $DISK ]]; then
     DISK=$(readlink -f "$DISK")
   fi
+}
+
+# Ansible's key=value extra-vars parser splits on spaces; JSON preserves the
+# command verbatim without asking a shell or Ansible to interpret its contents.
+terminal_command_extra_vars() {
+  python3 -c 'import json, sys; print(json.dumps({"xfce_terminal_custom_command": sys.argv[1]}))' \
+    "$XFCE_TERMINAL_CUSTOM_COMMAND"
 }
 
 validate_bool() {
@@ -215,6 +223,8 @@ validate_config() {
   [[ $DEFAULT_ARCHIVE_MANAGER == file-roller ]] || die "DEFAULT_ARCHIVE_MANAGER currently supports only file-roller."
   [[ $DEFAULT_MEDIA_PLAYER == mpv ]] || die "DEFAULT_MEDIA_PLAYER currently supports only mpv."
   [[ $DEFAULT_PDF_VIEWER == edge ]] || die "DEFAULT_PDF_VIEWER currently supports only edge."
+  [[ ! $XFCE_TERMINAL_CUSTOM_COMMAND =~ [[:cntrl:]] ]] \
+    || die "XFCE_TERMINAL_CUSTOM_COMMAND must be a single line without control characters."
   [[ $TPM_PCRS =~ ^[0-9]+([+][0-9]+)*$ ]] || die "TPM_PCRS must look like 7 or 7+11."
   [[ $TPM_PIN_MIN_LENGTH =~ ^[0-9]+$ ]] || die "TPM_PIN_MIN_LENGTH must be an integer."
   ((TPM_PIN_MIN_LENGTH >= 4 && TPM_PIN_MIN_LENGTH <= 64)) || die "TPM_PIN_MIN_LENGTH must be between 4 and 64."

@@ -29,6 +29,10 @@ bool_true "$MANAGE_DEFAULT_APPLICATIONS"
 [[ $DEFAULT_FILE_MANAGER == thunar ]]
 [[ $DEFAULT_TERMINAL == xfce4-terminal ]]
 [[ $DEFAULT_MEDIA_PLAYER == mpv ]]
+[[ -z $XFCE_TERMINAL_CUSTOM_COMMAND ]]
+grep -Fq -- '--extra-vars "$(terminal_command_extra_vars)"' "$ROOT/scripts/provision.sh"
+grep -Fq 'CustomCommand={{ xfce_terminal_custom_command }}' \
+  "$ROOT/ansible/roles/desktop/templates/terminalrc.j2"
 bool_true "$ENABLE_ONEDRIVE"
 [[ $ONEDRIVE_SYNC_DIR == OneDrive ]]
 [[ -z $ONEDRIVE_PROFILES ]]
@@ -72,5 +76,28 @@ expect_invalid "sed -i 's/^X11_LAYOUT=.*/X11_LAYOUT=\"gb;evil\"/' '$invalid'" \
   'Invalid X11 layout unexpectedly passed validation.'
 expect_invalid "sed -i 's/^DEFAULT_BROWSER=.*/DEFAULT_BROWSER=\"firefox\"/' '$invalid'" \
   'Unsupported default browser unexpectedly passed validation.'
+
+# An older installed policy need not contain the new key. Loading it must
+# retain the disabled default and still produce a usable Ansible value.
+sed '/^XFCE_TERMINAL_CUSTOM_COMMAND=/d' "$ROOT/config/install.conf.example" > "$invalid"
+load_config "$invalid"
+validate_config runtime
+[[ -z $XFCE_TERMINAL_CUSTOM_COMMAND ]]
+terminal_command_extra_vars | python3 -c 'import json, sys; assert json.load(sys.stdin) == {"xfce_terminal_custom_command": ""}'
+
+# Spaces, quotes, equal signs and shell/Ansible-looking tokens must survive as
+# data, never become a second extra-var or be evaluated by a shell.
+XFCE_TERMINAL_CUSTOM_COMMAND='env TITLE="work desk" sh -c '\''echo $HOME; echo {{ 1 + 1 }}; echo x=y'\'''
+export XFCE_TERMINAL_CUSTOM_COMMAND
+terminal_command_extra_vars | python3 -c 'import json, os, sys; assert json.load(sys.stdin) == {"xfce_terminal_custom_command": os.environ["XFCE_TERMINAL_CUSTOM_COMMAND"]}'
+if ! (validate_config runtime) >/dev/null 2>&1; then
+  echo 'Valid terminal command unexpectedly failed validation.' >&2
+  exit 1
+fi
+XFCE_TERMINAL_CUSTOM_COMMAND=$'echo safe\nRunCustomCommand=TRUE'
+if (validate_config runtime) >/dev/null 2>&1; then
+  echo 'Multiline terminal command unexpectedly passed validation.' >&2
+  exit 1
+fi
 
 echo 'Configuration validation tests passed.'

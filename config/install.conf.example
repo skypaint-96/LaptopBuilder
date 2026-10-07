@@ -64,6 +64,8 @@ DEFAULT_ARCHIVE_MANAGER="file-roller"
 DEFAULT_MEDIA_PLAYER="mpv"
 DEFAULT_PDF_VIEWER="edge"
 
+# Xfce Terminal's "Run a custom command instead of my shell" setting.
+# Empty disables it. Use one shell-quoted line; e.g. "tmux new-session -A -s work".
 XFCE_TERMINAL_CUSTOM_COMMAND=""
 
 # Cloud sync and first-login authentication. Tokens remain in each application's
