@@ -1,13 +1,7 @@
 ---
 - name: Install Snapper and pacman integration
   ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - snap-pac
-      - snapper
+    argv: "{{ ['pacman', '--sync', '--needed', '--noconfirm'] + lookup('ansible.builtin.pipe', 'bash ' ~ ((workstation_repo_root ~ '/scripts/package-list.sh') | quote) ~ ' snapshots').splitlines() }}"
   register: snapshot_packages
   changed_when: "'there is nothing to do' not in (snapshot_packages.stdout + snapshot_packages.stderr) | lower"
 

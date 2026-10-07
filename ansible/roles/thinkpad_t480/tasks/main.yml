@@ -5,18 +5,7 @@
 
 - name: Install ThinkPad power, thermal, storage, and firmware tools
   ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - bolt
-      - ethtool
-      - fwupd
-      - smartmontools
-      - thermald
-      - tlp
-      - tlp-rdw
+    argv: "{{ ['pacman', '--sync', '--needed', '--noconfirm'] + lookup('ansible.builtin.pipe', 'bash ' ~ ((workstation_repo_root ~ '/scripts/package-list.sh') | quote) ~ ' t480').splitlines() }}"
   register: t480_packages
   changed_when: "'there is nothing to do' not in (t480_packages.stdout + t480_packages.stderr) | lower"
 

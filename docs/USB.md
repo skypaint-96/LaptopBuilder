@@ -195,6 +195,55 @@ An ISO-only build has no writable `ARCHWS_DATA` partition, so `--include-secrets
 
 The ISO and SHA-256 file are written below `usb/output/`. No block device is modified.
 
+For an opt-in file-only UEFI boot/menu check using QEMU and private OVMF
+variables (no host disk passthrough), see [Testing](TESTING.md). ISO-only media
+has no writable data partition: a successful menu boot cannot establish
+offline installation or persisted configuration/secret behaviour.
+
+## Release and USB refresh acceptance checklist
+
+Use a **spare** USB and disposable target disk for integration tests, never a
+production drive. Record release commit/version, ArchISO date, USB model and
+serial, machine model/firmware, and the result of each item. The following is
+an operator checklist, not a claim that these checks ran in CI:
+
+- [ ] Run the strict static gate in [Testing](TESTING.md) and record any
+  separately run Arch/AUR package-resolution results. A skip is not a pass.
+- [ ] On Arch, build the ISO-only image and verify its companion SHA-256 file
+  with `sha256sum -c` from the same path/context where it was generated.
+  Compare the recorded digest to the intended release artifact, not only to
+  a checksum downloaded or copied alongside an untrusted image.
+- [ ] Perform the file-only OVMF menu smoke test in [Testing](TESTING.md).
+  Confirm ISO boot and options 1–9; do not interpret absent `ARCHWS_DATA` as
+  a defect in the ISO-only artifact.
+- [ ] On a **spare USB**, confirm the exact device identity before a full USB
+  build. Review builder byte-compare output and post-write ISO readback/hash
+  verification; independently read back the ISO-sized region and compare it
+  with the intended ISO if release policy requires independent verification.
+  Never point a readback/write command at an internal or host system disk.
+- [ ] Boot that USB on the target UEFI machine with Secure Boot disabled;
+  confirm the menu, diagnostics, writable `ARCHWS_DATA` mount, saved config,
+  and checksum-verified project bundle and encrypted secret metadata.
+  Do not display or log plaintext credentials.
+- [ ] Disconnect network and select the offline path on a **disposable**
+  installation disk. Verify cached project and official-package transaction
+  resolves before consenting to erase; verify install/boot, or mark offline
+  install untested if it is not performed. AUR first-boot provisioning is not
+  part of the offline guarantee.
+- [ ] Refresh using menu option 3 or `--refresh-only` on the **spare USB**.
+  Record before/after config file and encrypted bundle digests (not their
+  contents); verify both unchanged unless explicitly replaced. Check cache
+  metadata, project bundle, official ISO checksum and package cache, unmount
+  and remount, then boot again and confirm config and encrypted bundle still
+  load. Confirm the unlock passphrase is not stored on media.
+- [ ] If changing the immutable ISO, do a full USB rebuild, not just a cache
+  refresh; repeat boot and readback. Test Secure Boot/TPM recovery and
+  hardware-specific features separately against the [hardware matrix](TESTING.md).
+
+The builder's own post-write verification is valuable but not an independent
+release audit. Keep hashes and results in a release record; do not put secret
+values, plaintext credential files, or unlock passphrases into that record.
+
 ## Persistent layout
 
 ```text
@@ -225,7 +274,7 @@ ARCHWS_DATA/
 
 ## Diagnostics and I/O errors
 
-Option 6 displays:
+Option 7 displays:
 
 - UEFI, Secure Boot Setup Mode, and TPM state;
 - whether `ARCHWS_DATA` mounted successfully;

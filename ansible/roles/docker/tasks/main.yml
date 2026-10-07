@@ -1,14 +1,7 @@
 ---
 - name: Install Docker engine and CLI plugins
   ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - docker
-      - docker-buildx
-      - docker-compose
+    argv: "{{ ['pacman', '--sync', '--needed', '--noconfirm'] + lookup('ansible.builtin.pipe', 'bash ' ~ ((workstation_repo_root ~ '/scripts/package-list.sh') | quote) ~ ' docker').splitlines() }}"
   register: docker_packages
   changed_when: "'there is nothing to do' not in (docker_packages.stdout + docker_packages.stderr) | lower"
 

@@ -15,8 +15,8 @@ validate_config runtime
 bool_true "$ENABLE_AUR" || exit 0
 
 bootstrap_aur_helper() {
-  local package=$AUR_HELPER_PACKAGE temp_dir candidate
-  local -a pacman_args makepkg_args installed_helpers=()
+  local package=$AUR_HELPER_PACKAGE temp_dir artifact
+  local -a pacman_args makepkg_args artifacts=()
 
   helper_matches_policy() {
     command -v "$AUR_HELPER" >/dev/null 2>&1 || return 1
@@ -35,15 +35,6 @@ bootstrap_aur_helper() {
 
   if command -v "$AUR_HELPER" >/dev/null 2>&1; then
     warn "The installed '$AUR_HELPER' is broken or does not match AUR_HELPER_PACKAGE=$package; rebuilding it."
-  fi
-
-  for candidate in paru paru-debug paru-bin paru-bin-debug; do
-    pacman -Q "$candidate" >/dev/null 2>&1 && installed_helpers+=("$candidate")
-  done
-  if ((${#installed_helpers[@]})); then
-    pacman_args=(-Rns)
-    bool_true "$PROVISION_NONINTERACTIVE" && pacman_args+=(--noconfirm)
-    sudo pacman "${pacman_args[@]}" "${installed_helpers[@]}"
   fi
 
   info "Bootstrapping the '$package' AUR package to provide the '$AUR_HELPER' command."
@@ -72,11 +63,26 @@ bootstrap_aur_helper() {
 
   (
     cd "$temp_dir/$package" || exit 1
-    makepkg_args=(--syncdeps --install --needed --cleanbuild --clean)
+    # Build first. pacman -U resolves replacement conflicts in one transaction;
+    # never remove a working helper before the replacement package exists.
+    makepkg_args=(--syncdeps --cleanbuild)
     if bool_true "$AUR_NONINTERACTIVE"; then
       makepkg_args+=(--noconfirm)
     fi
     makepkg "${makepkg_args[@]}"
+    while IFS= read -r artifact; do
+      [[ -f $artifact ]] || die "Expected built package is missing: $artifact"
+      artifacts+=("$artifact")
+    done < <(makepkg --packagelist)
+    ((${#artifacts[@]})) || die "makepkg produced no packages for $package."
+    pacman_args=(-U)
+    # Conflict removal is permitted only as part of the replacement transaction.
+    # Bit 4 answers yes to pacman's conflict-removal question; other questions
+    # keep their safe defaults (notably do not use --noconfirm here).
+    if bool_true "$PROVISION_NONINTERACTIVE"; then
+      pacman_args+=(--ask 4)
+    fi
+    sudo pacman "${pacman_args[@]}" "${artifacts[@]}"
   )
 
   rm -rf "$temp_dir"

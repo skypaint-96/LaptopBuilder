@@ -2,6 +2,8 @@
 
 This is the intended package policy rather than a version lock. Arch is rolling release, so exact versions are resolved at installation and update time.
 
+**To add official software**, edit the appropriate array in [`scripts/lib/official-packages.sh`](../scripts/lib/official-packages.sh): `OFFICIAL_COMMON`, `OFFICIAL_DESKTOP`, or `OFFICIAL_DEVELOPMENT` for always-provisioned roles; `OFFICIAL_DOCKER`, `OFFICIAL_GAMING`, `OFFICIAL_SNAPSHOTS`, or `OFFICIAL_T480` for optional roles; vendor-specific arrays for Intel/AMD. `OFFICIAL_BASE_PACKAGES` (plus configured kernel/CPU/GPU arrays) is the install-stage base transaction. The installer and USB cache use the same arrays to resolve the selected profile, and the corresponding Ansible roles read their own arrays at provisioning time. Adding a package to an optional role does **not** enable that role on other machines: role/feature selection remains in the installation configuration and Ansible playbook. Keep AUR packages in the installation configuration instead. Run `bash tests/test-package-lists.sh` after editing; Arch repository resolution also requires an Arch environment.
+
 ## Base system and boot
 
 Installed from official repositories during the ISO stage:
@@ -38,7 +40,7 @@ noto-fonts noto-fonts-emoji ttf-dejavu
 The desktop Ansible role ensures these integration tools remain present:
 
 ```text
-file-roller gnome-keyring mousepad polkit-gnome ristretto
+blueman file-roller gnome-keyring libnotify mousepad mpv polkit-gnome ristretto
 xdg-desktop-portal xdg-desktop-portal-gtk
 ```
 

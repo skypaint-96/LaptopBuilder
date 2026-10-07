@@ -3,43 +3,20 @@
 # select an unsuitable provider when resolving Steam's lib32-vulkan-driver dependency.
 - name: Install Intel Vulkan userspace
   ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - lib32-vulkan-intel
-      - vulkan-intel
+    argv: "{{ ['pacman', '--sync', '--needed', '--noconfirm'] + lookup('ansible.builtin.pipe', 'bash ' ~ ((workstation_repo_root ~ '/scripts/package-list.sh') | quote) ~ ' gaming-intel').splitlines() }}"
   register: intel_gaming_packages
   changed_when: "'there is nothing to do' not in (intel_gaming_packages.stdout + intel_gaming_packages.stderr) | lower"
   when: gpu_vendor == 'intel'
 
 - name: Install AMD Vulkan userspace
   ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - lib32-vulkan-radeon
-      - vulkan-radeon
+    argv: "{{ ['pacman', '--sync', '--needed', '--noconfirm'] + lookup('ansible.builtin.pipe', 'bash ' ~ ((workstation_repo_root ~ '/scripts/package-list.sh') | quote) ~ ' gaming-amd').splitlines() }}"
   register: amd_gaming_packages
   changed_when: "'there is nothing to do' not in (amd_gaming_packages.stdout + amd_gaming_packages.stderr) | lower"
   when: gpu_vendor == 'amd'
 
 - name: Install common Steam gaming userspace
   ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - gamemode
-      - lib32-gamemode
-      - lib32-libpulse
-      - lib32-mesa
-      - mangohud
-      - steam
-      - vulkan-tools
+    argv: "{{ ['pacman', '--sync', '--needed', '--noconfirm'] + lookup('ansible.builtin.pipe', 'bash ' ~ ((workstation_repo_root ~ '/scripts/package-list.sh') | quote) ~ ' gaming').splitlines() }}"
   register: gaming_packages
   changed_when: "'there is nothing to do' not in (gaming_packages.stdout + gaming_packages.stderr) | lower"

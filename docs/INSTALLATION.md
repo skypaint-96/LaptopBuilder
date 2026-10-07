@@ -71,6 +71,8 @@ TPM_PIN_MIN_LENGTH=6
 
 `AUR_NONINTERACTIVE=true` suppresses Paru review/rebuild prompts only for the explicit `AUR_PACKAGES` allow-list. Set it to `false` when manual inspection is preferred.
 
+The AUR allow-list is additive, not a removal policy: deleting a name from `AUR_PACKAGES` stops this workflow from explicitly installing it on subsequent applies, but does **not** uninstall an already installed package or its dependencies. Review and remove obsolete packages manually with pacman/Paru after checking reverse dependencies and whether another application needs them. The helper itself is managed separately through `AUR_HELPER_PACKAGE`; a failed rebuild leaves the existing helper installed until a replacement package transaction succeeds.
+
 ## 4. Identify the whole target disk
 
 ```bash

@@ -1,23 +1,7 @@
 ---
 - name: Install lightweight desktop integration tools
   ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - bluez
-      - bluez-utils
-      - blueman
-      - file-roller
-      - gnome-keyring
-      - libnotify
-      - mousepad
-      - mpv
-      - polkit-gnome
-      - ristretto
-      - xdg-desktop-portal
-      - xdg-desktop-portal-gtk
+    argv: "{{ ['pacman', '--sync', '--needed', '--noconfirm'] + lookup('ansible.builtin.pipe', 'bash ' ~ ((workstation_repo_root ~ '/scripts/package-list.sh') | quote) ~ ' desktop').splitlines() }}"
   register: desktop_packages
   changed_when: "'there is nothing to do' not in (desktop_packages.stdout + desktop_packages.stderr) | lower"
 

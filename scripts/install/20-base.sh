@@ -132,66 +132,46 @@ enable_live_iso_multilib() {
     || die "The multilib repository database is unavailable in the live ISO."
 }
 
+# shellcheck source=../lib/official-packages.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/../lib/official-packages.sh"
+
 build_package_lists() {
   local -a kernels cpu_packages gpu_packages
   read -r -a kernels <<< "$KERNELS"
 
   case "$CPU_VENDOR" in
-    intel) cpu_packages=(intel-ucode sof-firmware) ;;
-    amd) cpu_packages=(amd-ucode) ;;
+    intel) cpu_packages=("${OFFICIAL_CPU_INTEL[@]}") ;;
+    amd) cpu_packages=("${OFFICIAL_CPU_AMD[@]}") ;;
   esac
 
   case "$GPU_VENDOR" in
-    intel) gpu_packages=(mesa vulkan-intel intel-media-driver) ;;
-    amd) gpu_packages=(mesa vulkan-radeon libva-mesa-driver) ;;
-    generic) gpu_packages=(mesa) ;;
+    intel) gpu_packages=("${OFFICIAL_GPU_INTEL[@]}") ;;
+    amd) gpu_packages=("${OFFICIAL_GPU_AMD[@]}") ;;
+    generic) gpu_packages=("${OFFICIAL_GPU_GENERIC[@]}") ;;
   esac
 
-  BASE_INSTALL_PACKAGES=(
-    base base-devel archlinux-keyring "${kernels[@]}" linux-firmware wireless-regdb "${cpu_packages[@]}"
-    btrfs-progs cryptsetup dosfstools gptfdisk efibootmgr
-    mkinitcpio systemd-ukify sbsigntools sbctl tpm2-tools tpm2-tss
-    networkmanager wpa_supplicant openssh
-    sudo git vim curl rsync tar ansible-core python
-    man-db man-pages texinfo bash-completion
-    zram-generator
-    xorg-server xorg-xinit xf86-input-libinput "${gpu_packages[@]}"
-    xfce4-session xfce4-panel xfdesktop xfwm4 xfce4-settings xfce4-appfinder
-    xfce4-terminal xfce4-power-manager xfce4-notifyd xfce4-screensaver
-    xfce4-pulseaudio-plugin thunar thunar-volman tumbler
-    lightdm lightdm-gtk-greeter
-    pipewire pipewire-alsa pipewire-pulse wireplumber pavucontrol
-    bluez bluez-utils
-    gnome-keyring polkit-gnome
-    gvfs gvfs-mtp udisks2 network-manager-applet
-    xdg-user-dirs xdg-utils xdg-desktop-portal-gtk
-    noto-fonts noto-fonts-emoji ttf-dejavu
-  )
+  BASE_INSTALL_PACKAGES=("${OFFICIAL_BASE_PACKAGES[@]}" "${kernels[@]}" "${cpu_packages[@]}" "${gpu_packages[@]}")
 
   REQUIRED_OFFICIAL_PACKAGES=(
     "${BASE_INSTALL_PACKAGES[@]}"
-    bat btop fd fastfetch fzf github-cli jq less pacman-contrib ripgrep unzip wget zip
-    file-roller mousepad mpv ristretto xdg-desktop-portal
-    cmake dotnet-sdk ninja shellcheck
+    "${OFFICIAL_COMMON[@]}" "${OFFICIAL_DESKTOP[@]}" "${OFFICIAL_DEVELOPMENT[@]}"
   )
 
   if bool_true "$ENABLE_DOCKER"; then
-    REQUIRED_OFFICIAL_PACKAGES+=(docker docker-buildx docker-compose)
+    REQUIRED_OFFICIAL_PACKAGES+=("${OFFICIAL_DOCKER[@]}")
   fi
   if bool_true "$ENABLE_GAMING"; then
-    REQUIRED_OFFICIAL_PACKAGES+=(
-      steam gamemode lib32-gamemode lib32-libpulse lib32-mesa mangohud vulkan-tools
-    )
+    REQUIRED_OFFICIAL_PACKAGES+=("${OFFICIAL_GAMING[@]}")
     case "$GPU_VENDOR" in
-      intel) REQUIRED_OFFICIAL_PACKAGES+=(vulkan-intel lib32-vulkan-intel) ;;
-      amd) REQUIRED_OFFICIAL_PACKAGES+=(vulkan-radeon lib32-vulkan-radeon) ;;
+      intel) REQUIRED_OFFICIAL_PACKAGES+=("${OFFICIAL_GAMING_INTEL[@]}") ;;
+      amd) REQUIRED_OFFICIAL_PACKAGES+=("${OFFICIAL_GAMING_AMD[@]}") ;;
     esac
   fi
   if bool_true "$ENABLE_SNAPSHOTS"; then
-    REQUIRED_OFFICIAL_PACKAGES+=(snapper snap-pac)
+    REQUIRED_OFFICIAL_PACKAGES+=("${OFFICIAL_SNAPSHOTS[@]}")
   fi
   if bool_true "$ENABLE_T480"; then
-    REQUIRED_OFFICIAL_PACKAGES+=(bolt ethtool fwupd smartmontools thermald tlp tlp-rdw)
+    REQUIRED_OFFICIAL_PACKAGES+=("${OFFICIAL_T480[@]}")
   fi
 
   mapfile -t REQUIRED_OFFICIAL_PACKAGES < <(printf '%s\n' "${REQUIRED_OFFICIAL_PACKAGES[@]}" | sort -u)

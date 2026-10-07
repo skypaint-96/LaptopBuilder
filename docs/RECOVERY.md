@@ -23,6 +23,8 @@ sudo archctl verify
 
 Investigate the current kernel or package update before changing the default permanently.
 
+If `archctl update` fails, rerun it after addressing the reported problem: it repeats the official upgrade, boot rebuild/signing, AUR stage, and cache cleanup in order. Boot repair is attempted on an official-upgrade or boot-stage error when signing is configured, but a failed repair is not proof that the UKIs are bootable; do not reboot until signing and UKIs have been checked. An AUR failure after the boot stage does not roll back official packages.
+
 ## TPM unlock fails
 
 A PCR mismatch or TPM lockout should fall back to an ordinary LUKS passphrase prompt. Enter the known-good passphrase.
@@ -84,11 +86,12 @@ Open LUKS and mount the installed layout:
 cryptsetup open /dev/nvme0n1p2 cryptroot
 mount -o subvol=@ /dev/mapper/cryptroot /mnt
 
-mkdir -p /mnt/{efi,home,var/log,var/cache/pacman/pkg,.snapshots}
+mkdir -p /mnt/{efi,home,var/log,var/cache/pacman/pkg,var/lib/arch-workstation/pending-credentials,.snapshots}
 mount /dev/nvme0n1p1 /mnt/efi
 mount -o subvol=@home /dev/mapper/cryptroot /mnt/home
 mount -o subvol=@var_log /dev/mapper/cryptroot /mnt/var/log
 mount -o subvol=@pkg /dev/mapper/cryptroot /mnt/var/cache/pacman/pkg
+mount -o subvol=@credentials /dev/mapper/cryptroot /mnt/var/lib/arch-workstation/pending-credentials
 mount -o subvol=@snapshots /dev/mapper/cryptroot /mnt/.snapshots
 
 arch-chroot /mnt
@@ -117,7 +120,7 @@ Only run `sbctl sign-all` when the expected owner key is present under `/var/lib
 
 ## Restore a root Snapper snapshot
 
-Snapshots do not include the separately mounted home, log, package-cache, or snapshot subvolumes. A root rollback therefore changes operating-system files while retaining user data and logs.
+Snapshots do not include the separately mounted home, log, package-cache, pending-credentials, or snapshot subvolumes. A root rollback therefore changes operating-system files while retaining user data, logs, and staged credentials.
 
 First inspect snapshots from a working boot:
 
@@ -153,10 +156,11 @@ The EFI System Partition is separate from Btrfs snapshots. Rebuild the UKIs from
 ```bash
 umount /mnt
 mount -o noatime,compress=zstd:1,subvol=@ /dev/mapper/cryptroot /mnt
-mkdir -p /mnt/{efi,home,var/log,var/cache/pacman/pkg,.snapshots}
+mkdir -p /mnt/{efi,home,var/log,var/cache/pacman/pkg,var/lib/arch-workstation/pending-credentials,.snapshots}
 mount -o noatime,compress=zstd:1,subvol=@home /dev/mapper/cryptroot /mnt/home
 mount -o noatime,compress=zstd:1,subvol=@var_log /dev/mapper/cryptroot /mnt/var/log
 mount -o noatime,compress=zstd:1,subvol=@pkg /dev/mapper/cryptroot /mnt/var/cache/pacman/pkg
+mount -o noatime,compress=zstd:1,subvol=@credentials /dev/mapper/cryptroot /mnt/var/lib/arch-workstation/pending-credentials
 mount -o noatime,compress=zstd:1,subvol=@snapshots /dev/mapper/cryptroot /mnt/.snapshots
 mount /dev/nvme0n1p1 /mnt/efi
 arch-chroot /mnt

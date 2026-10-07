@@ -61,29 +61,15 @@ The generic profile installs Mesa but no vendor-specific Vulkan or 32-bit Vulkan
 
 ## Adding official packages
 
-Put packages into the most relevant role under `ansible/roles/*/tasks/main.yml`. The existing roles use:
+Add package names to the appropriate group in [`scripts/lib/official-packages.sh`](../scripts/lib/official-packages.sh), not to a role's command task. The selected install/USB cache roots and the corresponding Ansible role read these same groups. For optional hardware/features, use their dedicated groups so packages are not installed on unrelated machines. See [PACKAGES.md](PACKAGES.md) for group details. The role command tasks use `--needed` for repeat runs and do not require `community.general`.
 
-```yaml
-- name: Install example package set
-  ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - package-one
-      - package-two
-```
-
-`--needed` makes repeat runs safe. The command tasks avoid requiring the much larger `community.general` collection solely for its pacman module.
-
-Add every new official package name to `tests/check-arch-packages.sh`, then run:
+Run:
 
 ```bash
 make test
 ```
 
-before committing. CI resolves the official package list in a current disposable Arch container. After deploying an updated repository to `/opt/arch-workstation`, run `archctl apply --skip-upgrade` to converge the installed machine without performing another full package upgrade.
+before committing. CI resolves the selected official package lists in a current disposable Arch container. After deploying an updated repository to `/opt/arch-workstation`, run `archctl apply --skip-upgrade` to converge the installed machine without performing another full package upgrade. Refresh the USB package cache after changing package groups for offline installs.
 
 ## Adding a new role
 
@@ -159,3 +145,6 @@ The disk and filesystem scripts are intentionally narrow. Adding dual boot, a se
 ## Default applications
 
 The default application policy is controlled by `MANAGE_DEFAULT_APPLICATIONS` and the `DEFAULT_*` values in `install.conf`. Version 0.3.7 supports the explicit Edge/Thunar/Xfce Terminal/Mousepad/VS Code/Ristretto/File Roller/mpv profile. Apply changes with `archctl apply --skip-upgrade`. The generated user files are `~/.config/mimeapps.list`, `~/.config/xfce4/helpers.rc`, and matching Xfce/Edge helper entries under `~/.local/share`.
+### VS Code settings
+
+Edit [`vscode/settings.json`](../vscode/settings.json) for keys managed by this repository. Provisioning merges those top-level keys into the user's VS Code JSONC settings (comments and trailing commas are accepted); managed keys win, unrelated local keys survive repeated runs. The resulting file is formatted as JSON, so existing comments/formatting are not preserved. An invalid settings file causes provisioning to fail without overwriting it. Nested objects under a managed top-level key are replaced as a unit.

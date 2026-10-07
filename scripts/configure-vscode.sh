@@ -5,11 +5,12 @@ REPO_ROOT="${ARCH_WORKSTATION_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.
 # shellcheck source=lib/common.sh
 source "$REPO_ROOT/scripts/lib/common.sh"
 require_non_root
-require_commands code
+require_commands code python3
 
 settings_dir="$HOME/.config/Code/User"
 install -d -m 0755 "$settings_dir"
-install -m 0644 "$REPO_ROOT/vscode/settings.json" "$settings_dir/settings.json"
+python3 "$REPO_ROOT/scripts/merge-vscode-settings.py" \
+  "$REPO_ROOT/vscode/settings.json" "$settings_dir/settings.json"
 
 while IFS= read -r extension; do
   [[ -n $extension && $extension != \#* ]] || continue

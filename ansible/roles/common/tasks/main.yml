@@ -1,33 +1,7 @@
 ---
 - name: Install baseline command-line tools
   ansible.builtin.command:
-    argv:
-      - pacman
-      - --sync
-      - --needed
-      - --noconfirm
-      - bash-completion
-      - bat
-      - btop
-      - curl
-      - fd
-      - fastfetch
-      - fzf
-      - git
-      - github-cli
-      - jq
-      - less
-      - man-db
-      - man-pages
-      - openssh
-      - pacman-contrib
-      - ripgrep
-      - rsync
-      - tar
-      - unzip
-      - vim
-      - wget
-      - zip
+    argv: "{{ ['pacman', '--sync', '--needed', '--noconfirm'] + lookup('ansible.builtin.pipe', 'bash ' ~ ((workstation_repo_root ~ '/scripts/package-list.sh') | quote) ~ ' common').splitlines() }}"
   register: common_packages
   changed_when: "'there is nothing to do' not in (common_packages.stdout + common_packages.stderr) | lower"
 
