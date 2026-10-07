@@ -15,6 +15,7 @@ default_image_viewer: ristretto
 default_archive_manager: file-roller
 default_media_player: mpv
 default_pdf_viewer: edge
+xfce_terminal_custom_command: ''
 enable_onedrive: true
 onedrive_profiles: []
 onedrive_sync_dir: OneDrive

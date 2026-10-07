@@ -31,8 +31,7 @@ bool_true "$MANAGE_DEFAULT_APPLICATIONS"
 [[ $DEFAULT_MEDIA_PLAYER == mpv ]]
 [[ -z $XFCE_TERMINAL_CUSTOM_COMMAND ]]
 grep -Fq -- '--extra-vars "$(terminal_command_extra_vars)"' "$ROOT/scripts/provision.sh"
-grep -Fq 'CustomCommand={{ xfce_terminal_custom_command }}' \
-  "$ROOT/ansible/roles/desktop/templates/terminalrc.j2"
+grep -Fq 'scripts/configure-xfce-terminal.sh' "$ROOT/ansible/roles/desktop/tasks/main.yml"
 bool_true "$ENABLE_ONEDRIVE"
 [[ $ONEDRIVE_SYNC_DIR == OneDrive ]]
 [[ -z $ONEDRIVE_PROFILES ]]

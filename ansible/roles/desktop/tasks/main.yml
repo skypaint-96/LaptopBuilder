@@ -69,21 +69,18 @@
     mode: '0644'
   when: manage_default_applications | bool
 
-- name: "Ensure Xfce Terminal config directory exists"
-  ansible.builtin.file:
-    path: "/home/{{ arch_user }}/.config/xfce4/terminal"
-    state: directory
-    owner: "{{ arch_user }}"
-    group: "{{ arch_user }}"
-    mode: "0755"
-
-- name: "Configure Xfce Terminal"
-  ansible.builtin.template:
-    src: terminalrc.j2
-    dest: "/home/{{ arch_user }}/.config/xfce4/terminal/terminalrc"
-    owner: "{{ arch_user }}"
-    group: "{{ arch_user }}"
-    mode: "0644"
+- name: Configure Xfce Terminal preferences in the user's xfconf channel
+  ansible.builtin.command:
+    argv:
+      - bash
+      - "{{ workstation_repo_root }}/scripts/configure-xfce-terminal.sh"
+      - "{{ xfce_terminal_custom_command }}"
+  become: true
+  become_user: "{{ arch_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd[arch_user][1] }}"
+  register: terminal_preferences
+  changed_when: "'XFCE_TERMINAL_CHANGED' in terminal_preferences.stdout"
 
 - name: Remove managed default-application files when disabled
   ansible.builtin.file:

@@ -28,6 +28,8 @@ structure:
 	./tests/test-upgrade-existing.sh
 	./tests/test-package-lists.sh
 	python3 ./tests/test-vscode-settings.py
+	python3 ./tests/test-xfce-terminal.py
+	bash ./tests/test-xfce-terminal.sh
 	python3 ./tests/test-update-recovery.py
 	./tests/test-security-state.sh
 	./tests/test-usb-layout.sh
