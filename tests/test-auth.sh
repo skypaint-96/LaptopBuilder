@@ -7,7 +7,11 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 # detect a OneDrive token but must never copy it into Git, USB data, or templates.
 grep -q 'gh auth login --hostname github.com --web' "$ROOT/scripts/auth.sh"
 grep -q 'gh auth setup-git --hostname github.com' "$ROOT/scripts/auth.sh"
-grep -q 'systemctl --user start --no-block' "$ROOT/scripts/auth.sh"
+grep -Fqx '  systemctl --user start --no-block "$ONEDRIVE_BOOTSTRAP_UNIT"' "$ROOT/scripts/auth.sh"
+if grep -Fq 'systemctl --user start --no-block "$ONEDRIVE_BOOTSTRAP_UNIT" "$profile"' "$ROOT/scripts/auth.sh"; then
+  echo 'Bootstrap is a single unit; a profile must not be passed as another unit name.' >&2
+  exit 1
+fi
 grep -q 'prepare_edge_for_oauth' "$ROOT/scripts/auth.sh"
 grep -q 'onedrive --confdir="\$ONEDRIVE_CONFIG_DIR" --sync --verbose' "$ROOT/scripts/onedrive-bootstrap.sh"
 grep -q 'configure_onedrive_links' "$ROOT/scripts/onedrive-bootstrap.sh"

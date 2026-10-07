@@ -281,7 +281,6 @@ authenticate_github() {
 }
 
 start_onedrive_background_bootstrap() {
-  local profile=${1:-default}
   systemctl --user daemon-reload
   if onedrive_bootstrap_active; then
     success 'OneDrive initial synchronisation is already running in the background.'
@@ -294,7 +293,8 @@ start_onedrive_background_bootstrap() {
 
   systemctl --user reset-failed "$ONEDRIVE_BOOTSTRAP_UNIT" >/dev/null 2>&1 || true
   rm -f "$ONEDRIVE_FAILED_MARKER"
-  systemctl --user start --no-block "$ONEDRIVE_BOOTSTRAP_UNIT" "$profile"
+  # The unit has no instance/profile argument; its helper processes configured profiles.
+  systemctl --user start --no-block "$ONEDRIVE_BOOTSTRAP_UNIT"
   sleep 1
   if onedrive_bootstrap_failed; then
     warn 'The OneDrive background service failed to start.'

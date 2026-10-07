@@ -10,6 +10,65 @@ Keep a copy of this guide and the repository somewhere other than the laptop. Re
 4. Disconnect unneeded external storage before running disk commands.
 5. Prefer reversible actions: choose the LTS kernel, use passphrase fallback, or temporarily disable Secure Boot.
 
+## Interrupted OneDrive initial synchronisation
+
+Run these read-only checks as the configured **non-root** user in a graphical
+session. Do not post the refresh token, private file names, or full logs publicly.
+
+```bash
+systemctl --user show arch-workstation-onedrive-bootstrap.service -p ActiveState -p SubState -p Result -p ExecMainCode -p ExecMainStatus -p ActiveEnterTimestamp -p InactiveEnterTimestamp -p InvocationID
+systemctl --user cat arch-workstation-onedrive-bootstrap.service
+journalctl --user -u arch-workstation-onedrive-bootstrap.service -b --no-pager -o short-iso
+journalctl --user -u arch-workstation-onedrive-bootstrap.service -b -1 --no-pager -o short-iso
+journalctl --user -b --no-pager -o short-iso --since 'YYYY-MM-DD HH:MM:SS' --until 'YYYY-MM-DD HH:MM:SS'
+journalctl -b --no-pager -o short-iso --since 'YYYY-MM-DD HH:MM:SS' --until 'YYYY-MM-DD HH:MM:SS' -u systemd-logind.service -u user@$(id -u).service
+loginctl show-user "$(id -un)" -p Linger -p State -p Sessions
+systemctl --user is-active onedrive.service
+ls -ld "$HOME/OneDrive" "$HOME/Documents" "$HOME/Pictures" "$HOME/Videos" "$HOME/.local/share/arch-workstation/folder-backups"
+ls -l "$HOME/.local/state/arch-workstation/onedrive/default/" "$HOME/.config/onedrive/config"
+```
+
+Replace the timestamps with a short window around the **historical** stop. For
+named profiles, inspect their configured sync directories, `onedrive-<name>`
+config directories and `onedrive/<name>` state directories instead. Missing paths
+or a missing previous-boot journal are not by themselves errors. Compare the
+invocation ID and timestamps to distinguish an earlier SIGTERM/stop from the
+current `inactive (dead), Result=success` state: a stop request or user-manager
+shutdown can yield success without finishing the helper. Check whether logind
+ended the last login session (linger disabled), the machine shut down, another
+administrator stopped the unit, or the sync client logged an error. The unit has
+`TimeoutStartSec=infinity`; a stop after seven minutes is not evidence of a
+seven-minute timeout. These logs alone may not identify who requested a stop.
+
+The authoritative completion condition is the profile's `bootstrap-complete`
+marker **and** expected home-folder links. A refresh token proves only local
+authentication; an inactive unit with no completion marker is not a completed
+initial sync. Do not remove the sync database or token, delete a backup, change
+the sync directory, or force a resync. Review existing local/remote files and
+links before retrying: ordinary OneDrive sync may propagate local changes or
+deletions; the folder migration uses `rsync --ignore-existing`, retains the
+original directories in dated backups and refuses unexpected links or mounts.
+If links or conflicts are unexpected, preserve data and investigate before retrying.
+
+Once the cause is understood, no other bootstrap/monitor is running, the
+configuration and backup have been checked, and the graphical login will remain
+active for the entire sync, resume the **same one-shot unit** as the configured
+user (not as root, not with a profile argument):
+
+```bash
+systemctl --user start --no-block arch-workstation-onedrive-bootstrap.service
+```
+
+Then follow `journalctl --user -u arch-workstation-onedrive-bootstrap.service -f`
+and check `archctl auth onedrive-status` until the completion marker and links
+are confirmed. An already running unit should be monitored, not restarted.
+If the session must end during a long initial sync, first check `Linger` and
+arrange a persistent user manager with your administrator; do not assume that
+closing the terminal keeps the user service alive after the last logout. Do not
+enable this one-shot unit for automatic starts at every login. A rerun may repeat
+initial sync and the safe folder migration, so inspect any partially migrated
+folders and backups before starting it again.
+
 ## Boot the LTS kernel
 
 systemd-boot normally hides behind a short timeout. Press and hold **Space** during startup to display the menu, then select the `arch-linux-lts.efi` entry.

@@ -71,7 +71,12 @@ one-shot user service and returns control to the terminal:
 systemctl --user start --no-block arch-workstation-onedrive-bootstrap.service
 ```
 
-That service performs the dry run, initial synchronisation, safe folder migration,
+This is a single non-template unit: its helper processes configured profiles; a
+profile name is not a second systemd unit to start. The one-shot service is not
+enabled for automatic restart at login. If interrupted, see the OneDrive section
+in [the recovery guide](RECOVERY.md) before starting it again.
+
+That service displays the effective configuration, performs initial synchronisation, safe folder migration,
 a second upload sync, and finally enables the normal monitor service:
 
 ```bash
