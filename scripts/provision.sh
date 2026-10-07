@@ -88,7 +88,7 @@ declare -a ansible_args=(
   --extra-vars "default_pdf_viewer=$DEFAULT_PDF_VIEWER"
   --extra-vars "$(terminal_command_extra_vars)"
   --extra-vars "enable_onedrive=$ENABLE_ONEDRIVE"
-  --extra-vars "onedrive_profiles=[]"
+  --extra-vars "$(onedrive_profiles_extra_vars)"
   --extra-vars "onedrive_sync_dir=$ONEDRIVE_SYNC_DIR"
   --extra-vars "onedrive_link_dirs=$ONEDRIVE_LINK_DIRS"
   --extra-vars "onedrive_skip_dotfiles=$ONEDRIVE_SKIP_DOTFILES"

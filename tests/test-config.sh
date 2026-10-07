@@ -36,6 +36,9 @@ bool_true "$ENABLE_ONEDRIVE"
 [[ $ONEDRIVE_SYNC_DIR == OneDrive ]]
 [[ -z $ONEDRIVE_PROFILES ]]
 [[ $ONEDRIVE_LINK_DIRS == 'Documents Pictures Videos' ]]
+grep -Fq -- '--extra-vars "$(onedrive_profiles_extra_vars)"' "$ROOT/scripts/provision.sh"
+! grep -Fq -- '--extra-vars "onedrive_profiles=[]"' "$ROOT/scripts/provision.sh"
+onedrive_profiles_extra_vars | python3 -c 'import json, sys; assert json.load(sys.stdin) == {"onedrive_profiles": []}'
 bool_true "$ENABLE_FIRST_LOGIN_AUTH"
 bool_true "$AUTH_GITHUB_CLI"
 bool_true "$AUTH_ONEDRIVE"
@@ -76,6 +79,20 @@ expect_invalid "sed -i 's/^X11_LAYOUT=.*/X11_LAYOUT=\"gb;evil\"/' '$invalid'" \
 expect_invalid "sed -i 's/^DEFAULT_BROWSER=.*/DEFAULT_BROWSER=\"firefox\"/' '$invalid'" \
   'Unsupported default browser unexpectedly passed validation.'
 
+# The shell config's validated profile specs must reach Ansible as a typed list
+# of dictionaries, never as a key=value string or interpreted extra arguments.
+ONEDRIVE_PROFILES='personal:OneDrive/Personal:Documents,Pictures work:OneDrive-Work/2026:'
+validate_config runtime
+onedrive_profiles_extra_vars | python3 -c 'import json, sys; assert json.load(sys.stdin) == {"onedrive_profiles": [{"name": "personal", "sync_dir": "OneDrive/Personal", "link_dirs": ["Documents", "Pictures"]}, {"name": "work", "sync_dir": "OneDrive-Work/2026", "link_dirs": []}]}'
+ONEDRIVE_PROFILES='one:sync_dir.v2:Docs two:Work/Archive:Photos'
+validate_config runtime
+onedrive_profiles_extra_vars | python3 -c 'import json, sys; assert json.load(sys.stdin)["onedrive_profiles"] == [{"name": "one", "sync_dir": "sync_dir.v2", "link_dirs": ["Docs"]}, {"name": "two", "sync_dir": "Work/Archive", "link_dirs": ["Photos"]}]'
+ONEDRIVE_PROFILES='bad:../outside:Docs'
+if (validate_config runtime) >/dev/null 2>&1; then
+  echo 'Unsafe OneDrive profile path unexpectedly passed validation.' >&2
+  exit 1
+fi
+
 # An older installed policy need not contain the new key. Loading it must
 # retain the disabled default and still produce a usable Ansible value.
 sed '/^XFCE_TERMINAL_CUSTOM_COMMAND=/d' "$ROOT/config/install.conf.example" > "$invalid"
@@ -83,6 +100,7 @@ load_config "$invalid"
 validate_config runtime
 [[ -z $XFCE_TERMINAL_CUSTOM_COMMAND ]]
 terminal_command_extra_vars | python3 -c 'import json, sys; assert json.load(sys.stdin) == {"xfce_terminal_custom_command": ""}'
+onedrive_profiles_extra_vars | python3 -c 'import json, sys; assert json.load(sys.stdin) == {"onedrive_profiles": []}'
 
 # Spaces, quotes, equal signs and shell/Ansible-looking tokens must survive as
 # data, never become a second extra-var or be evaluated by a shell.

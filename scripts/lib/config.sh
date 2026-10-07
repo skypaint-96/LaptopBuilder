@@ -113,6 +113,17 @@ terminal_command_extra_vars() {
     "$XFCE_TERMINAL_CUSTOM_COMMAND"
 }
 
+# Pass profiles as a JSON list: key=value extra-vars turn even [] into a string.
+# Match the validated whitespace-separated name:sync-dir:link1,link2 format.
+onedrive_profiles_extra_vars() {
+  python3 -c 'import json, sys
+profiles = []
+for spec in sys.argv[1].split():
+    name, sync_dir, link_csv = (spec.split(":", 2) + [""] * 2)[:3]
+    profiles.append({"name": name, "sync_dir": sync_dir, "link_dirs": link_csv.split(",") if link_csv else []})
+print(json.dumps({"onedrive_profiles": profiles}))' "$ONEDRIVE_PROFILES"
+}
+
 validate_bool() {
   local name=$1 value=${!1}
   case "${value,,}" in

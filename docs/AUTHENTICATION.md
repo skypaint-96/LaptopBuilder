@@ -143,6 +143,14 @@ home directory. `ONEDRIVE_LINK_DIRS` accepts simple top-level directory names.
 Set `ONEDRIVE_PROFILES` to add multiple accounts using `name:sync-dir:link1,link2`
 entries, for example `personal:OneDrive:Documents,Pictures work:OneDrive-Work:`.
 When `ONEDRIVE_PROFILES` is empty, the legacy single-profile variables remain in use.
+Provisioning passes configured profiles as a typed list to Ansible and writes a
+separate managed configuration under `~/.config/onedrive-<name>/config` for each
+profile. After upgrading an existing installation, rerun `archctl apply` to
+create these files before authenticating the profiles. When switching from a
+legacy single profile, the managed legacy config is removed, but existing
+authentication tokens and synced data are not migrated or deleted; authenticate
+each named profile separately. Keep a backup of any locally customised config
+before reprovisioning, as managed config files are replaced.
 
 ## Upstream documentation
 
