@@ -18,7 +18,7 @@ The script elevates itself and:
 3. preserves `/etc/arch-installer/install.conf` and `/etc/arch-installer/install.env`;
 4. stages the new tree before replacing the installed tree;
 5. repairs executable modes and the `/usr/local/bin/archctl`, `arch-workstation-start`, and `arch-workstation-build-usb` links;
-6. updates the AUR helper policy for the current pacman/libalpm ABI and appends missing OneDrive/auth defaults:
+6. updates the AUR helper policy for the current pacman/libalpm ABI and adds missing OneDrive/auth settings:
    - `AUR_HELPER_PACKAGE="paru"`;
    - `AUR_NONINTERACTIVE=true`;
    - `PROVISION_NONINTERACTIVE=true`.
@@ -37,7 +37,7 @@ Run as the normal user:
 archctl finish
 ```
 
-After the first-boot workflow is complete, use `archctl apply` to reapply the desired configuration without rerunning the Secure Boot/TPM state machine. Existing `install.conf` values are preserved during migration. The OneDrive AUR package is appended to an existing allow-list without replacing custom entries; newly introduced OneDrive/auth settings are added only when absent.
+After the first-boot workflow is complete, use `archctl apply` to reapply the desired configuration without rerunning the Secure Boot/TPM state machine. The migration preserves an existing `AUR_PACKAGES` allow-list, including deliberate omissions; it does not install or remove packages itself. If you want OneDrive on a migrated system, include `onedrive-abraunegg` in the allow-list before applying. When `AUR_PACKAGES` is absent, the runtime uses the defaults from `scripts/lib/config.sh`. Newly introduced OneDrive/auth settings are added only when absent; the AUR helper and noninteractive settings are updated as described above.
 
 An accidental `sudo archctl finish` is automatically re-executed as the invoking user.
 

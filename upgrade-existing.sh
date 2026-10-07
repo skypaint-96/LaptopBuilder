@@ -143,27 +143,7 @@ ensure_config_value() {
   grep -q "^${key}=" "$CONFIG_FILE" || set_config_value "$key" "$assignment"
 }
 
-append_config_package() {
-  local key=$1 package=$2 current quoted item found=false
-  local -a current_packages=()
-  current=$(bash -c 'source "$1"; printf "%s" "${!2:-}"' _ "$CONFIG_FILE" "$key")
-  read -r -a current_packages <<< "$current"
-  for item in "${current_packages[@]}"; do
-    if [[ $item == "$package" ]]; then
-      found=true
-      break
-    fi
-  done
-  if [[ $found == false ]]; then
-    current="${current:+$current }$package"
-    printf -v quoted '%q' "$current"
-    set_config_value "$key" "$key=$quoted"
-  fi
-}
 set_config_value AUR_HELPER_PACKAGE 'AUR_HELPER_PACKAGE="paru"'
-append_config_package AUR_PACKAGES onedrive-abraunegg
-append_config_package AUR_PACKAGES omnissa-horizon-client
-append_config_package AUR_PACKAGES vyprvpn
 ensure_config_value ENABLE_ONEDRIVE 'ENABLE_ONEDRIVE=true'
 ensure_config_value ONEDRIVE_PROFILES 'ONEDRIVE_PROFILES=""'
 ensure_config_value ONEDRIVE_SYNC_DIR 'ONEDRIVE_SYNC_DIR="OneDrive"'
